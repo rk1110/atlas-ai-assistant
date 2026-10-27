@@ -43,6 +43,10 @@ class Settings(BaseSettings):
     langfuse_ui_url: str = "http://localhost:3001"  # what your browser opens (trace links)
     langfuse_project_id: str = "atlas"  # matches LANGFUSE_INIT_PROJECT_ID in docker-compose.yml
 
+    # --- HTTP ---
+    # Browser origins allowed to call the API (CORS). JSON list in env: CORS_ORIGINS='["..."]'
+    cors_origins: list[str] = ["http://localhost:3000"]
+
     # --- App behaviour ---
     assistant_name: str = "Atlas"  # fills $assistant_name in prompts; rename the product here
     chat_history_limit: int = 20  # messages re-sent to the model each turn (short-term memory)

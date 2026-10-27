@@ -9,11 +9,12 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import text
 
 from api import chat, classify, conversations, models
-from api.deps import SessionDep
+from api.deps import SessionDep, get_settings
 from core.tracing import get_tracer
 
 # Show our own INFO logs (uvicorn only configures its own loggers).
@@ -29,6 +30,15 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="Atlas API", version="0.1.0", lifespan=lifespan)
+
+# CORS: browsers block a page on one origin (localhost:3000) from reading responses from
+# another (localhost:8000) unless the server explicitly allows it. We allow only our frontend.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().cors_origins,
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type"],
+)
 app.include_router(chat.router)
 app.include_router(classify.router)
 app.include_router(conversations.router)

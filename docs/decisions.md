@@ -126,3 +126,22 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 | **Per-model `structured_output: native | prompt`**; Ollama Cloud models use `prompt` | Tested 2026-10-27: Ollama Cloud ignores the JSON-schema `format` field for every model tried (even calling Ollama's API directly), so native mode returned plain text. Prompt mode = schema in the system prompt, fence-stripping, Pydantic validation, one retry with the exact validation error | Switch providers just for classification; prompt mode everywhere (wastes native enforcement where it exists) |
 | Prompt mode costs ~330 extra input tokens per call (the schema text) | Accepted for Phase 1; Phase 7 cost work can shorten schemas or switch the cheap model to a native-schema provider | — |
 | Langfuse v4 API: read traces via `/api/public/v2/observations` | The server runs in v4 "events_only" mode, where the old `/traces` endpoints return 404 | — |
+
+## 2026-10-27 · Phase 1 checkpoint B (frontend shell + chat page)
+
+| Decision | Why | Alternatives considered |
+| --- | --- | --- |
+| Browser calls FastAPI directly with **CORS** (origins from `CORS_ORIGINS`) | A Next.js proxy can buffer SSE and kill the token-by-token effect | Next.js rewrites/proxy (same-origin, but buffering risk) |
+| Two backend URLs: `NEXT_PUBLIC_API_URL` (browser) and `API_INTERNAL_URL` (server components, Docker network) | "localhost" inside the frontend container is the container itself | One URL (server-side fetches fail in Docker) |
+| Own SSE reader (`fetch` + `ReadableStream` + buffer split on blank lines) | `EventSource` can't POST; mirrors our event contract exactly (decision from the Phase 1 plan) | Vercel AI SDK `useChat` |
+| Stop = `AbortController`; backend catches cancellation, saves the partial answer as `error_code="cancelled"` inside `anyio.CancelScope(shield=True)` | Inside a cancelled task every await is cancelled again; shielding lets the save finish. `aclosing()` closes nested generators deterministically | Lose partial answers on disconnect (the 4a limitation) |
+| `anyio==4.15.1` as a direct dependency | We import it directly now; it was already installed via Starlette | Rely on a transitive dependency |
+| BuildKit cache mount for `uv sync` in the backend Dockerfile | Dependency changes no longer re-download all ~85 packages (rebuilds took 10+ min) | Pre-built base image; accept slow builds |
+| Routes: `/` = new chat, `/chat/[id]` = conversation (server-rendered history + `loading.tsx` skeleton) | Bookmarkable URLs; history visible before JS loads | Single page with client-side state only |
+| New chat creates its UUID on first Send, then `router.replace('/chat/<id>')` after the first answer | Next 16 `cacheComponents` prerenders pages: random values during render would be baked in | Generate in render (rejected by Next), server-generated id |
+| Kept Next 16 `cacheComponents: true`; URL-dependent sidebar parts wrapped in `<Suspense>`, Settings model list uses `connection()` inside `<Suspense>` | Static shell is prerendered, live parts stream in. It's Next 16's default model, so we learn it rather than turn it off | Disable cacheComponents (older, fully dynamic rendering) |
+| Edited shadcn's `SidebarMenuSkeleton` (useId-based width) and `use-mobile` (useSyncExternalStore) | shadcn code is ours: Math.random() during prerender and setState-in-effect violate Next 16 / React 19 rules | Suppress lint rules |
+| `clsx` + `tailwind-merge` in `lib/utils.ts` instead of shadcn's new `cn` package | Approved, mature packages; `cn` was weeks old (it remains a transitive dependency of the shadcn CLI) | `cn` package |
+| `shadcn@4.23.0` (published 2026-10-27) as a **devDependency** | 4.21.4 pulled a zod version with a high-severity DoS (npm audit); 4.23.0 fixes it. Only needed at build time (CLI + `shadcn/tailwind.css`) | Keep 4.21.4 (vulnerable); runtime dependency |
+| Only messages created during the visit animate in (`live` flag) | History must be visible in server-rendered HTML; `initial={opacity:0}` hid it until JS loaded (caught by a headless screenshot) | Animate everything |
+| Atlas theme: cool neutrals + teal accent (OKLCH tokens), same accent as the Atlas Map | A product identity instead of shadcn's default greys | Default theme |

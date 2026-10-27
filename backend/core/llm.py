@@ -13,6 +13,7 @@ Two kinds of call:
 - `complete_structured`: JSON that must match a Pydantic schema (classification, tool inputs)
 """
 
+import asyncio
 import json
 import os
 import re
@@ -157,6 +158,12 @@ class LLMGateway:
                 raise LLMError("refusal", "The model declined to answer this request.", entry.id)
         except LLMError as err:
             _record_failure(err, generation, span if own_trace else None)
+            raise
+        except (asyncio.CancelledError, GeneratorExit):
+            # Caller stopped reading (client disconnected). Close the observation, don't hide it.
+            generation.fail("cancelled by caller")
+            if own_trace:
+                span.finish(error="cancelled")
             raise
         except Exception as exc:
             err = self._translate_error(exc, entry)

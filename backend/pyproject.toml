@@ -6,6 +6,7 @@ requires-python = "==3.13.*"
 # Exact pins only (CLAUDE.md). Rule: newest release that is >= 14 days old, unless a security fix needs newer.
 dependencies = [
     "alembic==1.20.0",
+    "anyio==4.15.1",
     "asyncpg==0.32.0",
     "fastapi==0.143.0",
     "langfuse==4.17.0",

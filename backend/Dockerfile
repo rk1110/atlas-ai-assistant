@@ -15,8 +15,11 @@ ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
 WORKDIR /app/backend
 
 # Dependencies first: this layer is cached until pyproject.toml / uv.lock change.
+# The cache mount keeps uv's download cache between builds, so changing one dependency
+# re-downloads only that package instead of all ~85 (the first build still fetches everything).
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv sync --frozen --no-install-project
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --frozen --no-install-project
 
 COPY backend/ ./
 COPY prompts/ /app/prompts/

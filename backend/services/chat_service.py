@@ -10,14 +10,20 @@ Flow of `stream_reply`:
     3. stream from the LLM gateway: each text delta becomes a TokenEvent
     4. save the assistant message with provenance (model, prompt, tokens, cost, latency)
     5. finish with DoneEvent, which is ALWAYS the last event, even after an error
+
+If the client disconnects mid-answer (Stop button, closed tab), the partial answer is saved
+with error_code="cancelled" before the cancellation is allowed to continue.
 """
 
+import asyncio
 import logging
 import uuid
 from collections.abc import AsyncIterator
+from contextlib import aclosing
 from datetime import date
 from decimal import Decimal
 
+import anyio
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
@@ -77,8 +83,11 @@ class ChatService:
             metadata={"model_id": model_id},
         )
         try:
-            async for event in self._stream_reply(request, model_id, trace):
-                yield event
+            # aclosing: if this stream is closed early, close the inner one too, right away
+            # (otherwise it would only be cleaned up whenever the garbage collector gets to it).
+            async with aclosing(self._stream_reply(request, model_id, trace)) as events:
+                async for event in events:
+                    yield event
         except Exception:
             # Anything unexpected (DB down, a bug): log the full traceback for us,
             # send the user a generic message (never internals), and still close cleanly.
@@ -87,7 +96,9 @@ class ChatService:
             yield ErrorEvent(
                 code="internal", message="Something went wrong on our side.", retryable=True
             )
-            yield DoneEvent(message_id=None, trace_id=trace.trace_id)
+            yield DoneEvent(
+                message_id=None, trace_id=trace.trace_id, trace_url=self._trace_url(trace)
+            )
 
     async def _stream_reply(
         self, request: ChatRequest, model_id: str, trace: Span
@@ -110,27 +121,47 @@ class ChatService:
         answer_parts: list[str] = []
         completion: Completion | None = None
         error: ErrorEvent | None = None
+        stream = self._gateway.stream_chat(
+            model_id, llm_messages, trace=trace, name="chat", prompt_ref=prompt.ref
+        )
         try:
-            async for chunk in self._gateway.stream_chat(
-                model_id, llm_messages, trace=trace, name="chat", prompt_ref=prompt.ref
-            ):
-                if isinstance(chunk, TextDelta):
-                    answer_parts.append(chunk.text)
-                    yield TokenEvent(text=chunk.text)
-                else:
-                    completion = chunk
+            async with aclosing(stream) as chunks:
+                async for chunk in chunks:
+                    if isinstance(chunk, TextDelta):
+                        answer_parts.append(chunk.text)
+                        yield TokenEvent(text=chunk.text)
+                    else:
+                        completion = chunk
         except LLMError as err:
             logger.warning("LLM error [%s] for %s: %s", err.kind, err.model_id, err.detail)
             error = ErrorEvent(
                 code=err.kind, message=err.message, retryable=err.kind in RETRYABLE_CODES
             )
+        except (asyncio.CancelledError, GeneratorExit):
+            # The client went away. Keep the partial answer, then let cancellation continue.
+            # Shielded: inside a cancelled task, every await would otherwise be cancelled too.
+            logger.info("client disconnected from conversation %s", request.conversation_id)
+            trace.finish(output="".join(answer_parts) or None, error="cancelled by client")
+            if answer_parts:
+                with anyio.CancelScope(shield=True):
+                    await self._save_assistant_message(
+                        request.conversation_id, "".join(answer_parts), model_id, prompt,
+                        None, "cancelled", trace.trace_id,
+                    )  # fmt: skip
+            raise
 
         answer = "".join(answer_parts)
         trace.finish(output=answer or None, error=error.message if error else None)
         message_id: uuid.UUID | None = None
         if answer:  # save complete answers, and partial ones cut off by an error
             message_id = await self._save_assistant_message(
-                request.conversation_id, answer, model_id, prompt, completion, error, trace.trace_id
+                request.conversation_id,
+                answer,
+                model_id,
+                prompt,
+                completion,
+                error.code if error else None,
+                trace.trace_id,
             )
 
         if error:
@@ -140,7 +171,11 @@ class ChatService:
             usage=_usage(model_id, completion),
             prompt_ref=prompt.ref,
             trace_id=trace.trace_id,
+            trace_url=self._trace_url(trace),
         )
+
+    def _trace_url(self, trace: Span) -> str | None:
+        return self._tracer.trace_url(trace.trace_id)
 
     async def _get_or_create_conversation(
         self, session: AsyncSession, request: ChatRequest
@@ -189,7 +224,7 @@ class ChatService:
         model_id: str,
         prompt: RenderedPrompt,
         completion: Completion | None,
-        error: ErrorEvent | None,
+        error_code: str | None,
         trace_id: str | None,
     ) -> uuid.UUID:
         async with self._session_factory() as session:
@@ -199,7 +234,7 @@ class ChatService:
                 content=answer,
                 model_id=model_id,
                 prompt_ref=prompt.ref,
-                error_code=error.code if error else None,
+                error_code=error_code,
                 trace_id=trace_id,
             )
             if completion:

@@ -183,7 +183,7 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
   <header class="head">
     <div class="fix">
       <span>Position: <b>Phase 1 · Foundation</b></span>
-      <span>Next: <b>Checkpoint B of 3 (frontend)</b></span>
+      <span>Next: <b>Checkpoint C of 3 (evals, tests, docs)</b></span>
       <span>Updated <b>2026-10-27</b></span>
     </div>
     <h1>Atlas Map</h1>
@@ -223,7 +223,7 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
     <div class="phase1">
       <div class="phase1-head">
         <strong>Phase 1 · Foundation</strong>
-        <span class="mono" style="color:var(--ink-2)">two thirds done · 6 of 9 steps</span>
+        <span class="mono" style="color:var(--ink-2)">nearly done · 7 of 9 steps</span>
       </div>
       <div class="checkpoints" id="checkpoints"></div>
       <p class="loop">Then the learning loop: walkthrough doc, 2–3 exercises you write yourself, the quiz, and "break it".</p>
@@ -239,10 +239,10 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 const LAYERS = ["Browser", "API", "Service", "Core", "Providers", "Data"];
 
 const NODES = {
-  chatui:   { layer: "Browser", name: "Chat page", file: "frontend/app/ + lib/use-chat-stream.ts", status: "next",
-              what: "Where you type. Sends your message with fetch() and reads the answer as a stream, appending text as each token arrives.",
-              concept: "<strong>Client component.</strong> It runs in the browser because it needs state and a live stream. Built in checkpoint B." },
-  eventsts: { layer: "Browser", name: "Event types", file: "frontend/lib/events.ts", status: "next",
+  chatui:   { layer: "Browser", name: "Chat page", file: "frontend/components/chat/ + lib/use-chat-stream.ts", status: "built",
+              what: "Where you type. Sends your message with fetch() and reads the answer as a stream, appending text as each token arrives. Stop cancels it.",
+              concept: "<strong>Client component.</strong> It runs in the browser because it needs state and a live stream. History is rendered on the server first." },
+  eventsts: { layer: "Browser", name: "Event types", file: "frontend/lib/events.ts", status: "built",
               what: "TypeScript copy of the seven event shapes, so the UI knows exactly what each `type` carries.",
               concept: "<strong>Contract mirror.</strong> Must match core/events.py exactly. A test will keep them in sync." },
   chatapi:  { layer: "API", name: "POST /api/chat", file: "backend/api/chat.py", status: "built",
@@ -330,8 +330,8 @@ const STEPS = [
 const CHECKPOINTS = [
   { name: "Done", status: "built", items: ["1 · Repo skeleton", "2 · Docker stack (8 services)", "3 · Backend core", "4a · Streaming chat API"] },
   { name: "Checkpoint A", status: "built", items: ["4b · Structured output", "5 · Langfuse tracing"] },
-  { name: "Checkpoint B", status: "next", items: ["6 · App shell, 5 pages, dark mode", "7 · Streaming chat page"] },
-  { name: "Checkpoint C", status: "later", items: ["8 · Eval scaffold", "9 · Tests and docs"] },
+  { name: "Checkpoint B", status: "built", items: ["6 · App shell, 5 pages, dark mode", "7 · Streaming chat page"] },
+  { name: "Checkpoint C", status: "next", items: ["8 · Eval scaffold", "9 · Tests and docs"] },
 ];
 
 const PHASES = [

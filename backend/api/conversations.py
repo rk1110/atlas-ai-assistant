@@ -7,7 +7,7 @@ from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import select
 
-from api.deps import SessionDep
+from api.deps import SessionDep, TracerDep
 from models import Conversation, Message
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
@@ -25,7 +25,11 @@ class MessageOut(BaseModel):
     content: str
     created_at: datetime
     model_id: str | None
-    error_code: str | None
+    error_code: str | None  # e.g. "billing", or "cancelled" when the user pressed Stop
+    input_tokens: int | None
+    output_tokens: int | None
+    latency_ms: int | None
+    trace_url: str | None
 
 
 @router.get("")
@@ -40,7 +44,9 @@ async def list_conversations(session: SessionDep, limit: int = 50) -> list[Conve
 
 
 @router.get("/{conversation_id}/messages")
-async def list_messages(conversation_id: uuid.UUID, session: SessionDep) -> list[MessageOut]:
+async def list_messages(
+    conversation_id: uuid.UUID, session: SessionDep, tracer: TracerDep
+) -> list[MessageOut]:
     if await session.get(Conversation, conversation_id) is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
     rows = await session.scalars(
@@ -56,6 +62,10 @@ async def list_messages(conversation_id: uuid.UUID, session: SessionDep) -> list
             created_at=m.created_at,
             model_id=m.model_id,
             error_code=m.error_code,
+            input_tokens=m.input_tokens,
+            output_tokens=m.output_tokens,
+            latency_ms=m.latency_ms,
+            trace_url=tracer.trace_url(m.trace_id),
         )
         for m in rows.all()
     ]

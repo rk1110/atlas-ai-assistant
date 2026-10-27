@@ -210,7 +210,10 @@ services:
     depends_on:
       backend: { condition: service_healthy }
     environment:
+      # Browser -> backend goes via your Mac (localhost). Server Components run INSIDE this
+      # container, where "localhost" is the frontend itself, so they use Docker's network name.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      API_INTERNAL_URL: http://backend:8000
     ports:
       - "3000:3000"
     volumes:

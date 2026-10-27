@@ -1,0 +1,82 @@
+/**
+ * Typed client for the Atlas backend's JSON endpoints (everything except the chat stream,
+ * which lives in use-chat-stream.ts). Response types mirror the backend's Pydantic models.
+ *
+ * Two base URLs, because the same code runs in two places:
+ * - in the browser, requests go to NEXT_PUBLIC_API_URL (http://localhost:8000, via your Mac)
+ * - in Server Components (inside the frontend container), "localhost" would be the frontend
+ *   container itself, so they use API_INTERNAL_URL (http://backend:8000, Docker's network)
+ */
+
+export interface ModelInfo {
+  id: string;
+  label: string;
+  provider: string;
+  available: boolean;
+  unavailable_reason: string | null;
+}
+
+export interface ModelsResponse {
+  models: ModelInfo[];
+  default_model: string;
+}
+
+export interface ConversationSummary {
+  id: string;
+  title: string | null;
+  updated_at: string;
+}
+
+export interface StoredMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  created_at: string;
+  model_id: string | null;
+  error_code: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  latency_ms: number | null;
+  trace_url: string | null;
+}
+
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
+    super(message);
+  }
+}
+
+export const BROWSER_API_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+function baseUrl(): string {
+  const onServer = typeof window === "undefined";
+  return onServer ? (process.env.API_INTERNAL_URL ?? BROWSER_API_URL) : BROWSER_API_URL;
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  // no-store: chat data changes constantly; never serve a cached copy.
+  const response = await fetch(`${baseUrl()}${path}`, { cache: "no-store", ...init });
+  if (!response.ok) {
+    throw new ApiError(response.status, `${init?.method ?? "GET"} ${path} failed (${response.status})`);
+  }
+  return response.status === 204 ? (undefined as T) : ((await response.json()) as T);
+}
+
+export const api = {
+  models: () => request<ModelsResponse>("/api/models"),
+  conversations: () => request<ConversationSummary[]>("/api/conversations"),
+  messages: (conversationId: string) =>
+    request<StoredMessage[]>(`/api/conversations/${conversationId}/messages`),
+  deleteConversation: (conversationId: string) =>
+    request<void>(`/api/conversations/${conversationId}`, { method: "DELETE" }),
+};
+
+/** Fired after anything that changes the sidebar's conversation list. */
+export const CONVERSATIONS_CHANGED = "atlas:conversations-changed";
+
+export function notifyConversationsChanged(): void {
+  window.dispatchEvent(new Event(CONVERSATIONS_CHANGED));
+}

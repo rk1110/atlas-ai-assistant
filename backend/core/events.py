@@ -64,7 +64,8 @@ class DoneEvent(BaseModel):
     message_id: str | None  # id of the saved assistant message (None if nothing was saved)
     usage: Usage | None = None  # None when the call failed before the model answered
     prompt_ref: str | None = None  # which prompt produced the answer, e.g. "chat_system@v1"
-    trace_id: str | None = None  # Langfuse trace id (step 5), for "view trace" links
+    trace_id: str | None = None  # Langfuse trace id
+    trace_url: str | None = None  # ready-made link to that trace in the Langfuse UI
 
 
 # ---------------------------------------------------------------- Phase 2+: defined now, used later
