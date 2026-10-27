@@ -52,3 +52,15 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 | Availability check: key present, or TCP probe for local servers | Lets the UI grey out models; a present key can still be rejected, which surfaces as a typed error at call time | Real test call per model (costs money, slow) |
 | Explicit ruff rule set (`E,W,F,I,B,UP,BLE,ASYNC,RUF`) | Upgrading ruff must not silently change what we enforce | Ruff defaults |
 | Accepted `filelock 3.32.7` CVEs (pip-audit) | LiteLLM pins `filelock<4`; 2 of 3 CVEs are Windows-only and the Linux one is in `ReadWriteLock`, which nothing in our tree uses. Re-audit on every LiteLLM bump | Force `filelock 4.x` past LiteLLM's declared range |
+
+## 2026-10-27 · Phase 1 step 3b (prompt registry + stream events)
+
+| Decision | Why | Alternatives considered |
+| --- | --- | --- |
+| Prompts as one YAML file per prompt, multiple immutable versions + `active` | Reviewable in git, comparable in evals; every answer records `name@version` | Python string constants (no versioning); Langfuse prompt management (UI editing, runtime fetch; a possible later upgrade) |
+| `string.Template` (`$var`) for templating | Literal `{}` (JSON examples) need no escaping; stdlib, no new dependency | `str.format` (brace escaping bugs); Jinja2 (powerful, extra dependency, logic in prompts) |
+| Declared `variables` must equal the template's placeholders; render rejects missing/extra | A typo'd variable fails at startup or in tests, not as a silently broken prompt in production | `safe_substitute` (leaves `$typo` in the prompt silently) |
+| All 7 `StreamEvent` types defined now as a Pydantic discriminated union on `type` | Frontend mirrors one fixed contract; later phases only emit events, never rewire | Define each event when first needed (frontend churn every phase) |
+| SSE frames carry only `data: <json>` (type inside the JSON), no `event:` line | One parsing rule on the frontend: split on blank lines, parse JSON, switch on `type` | Named SSE events (`event: token`), useful with `EventSource` listeners, but we use `fetch` streams (POST body) |
+| `ErrorEvent.retryable` + user-safe `message` | UI shows "Try again" only when it can help; never leaks stack traces or secrets | Raw exception text |
+| `DoneEvent` carries `usage`, `prompt_ref`, optional `trace_id` | Analytics and "view trace" links get everything from the stream; `trace_id` stays optional until step 5 | Separate stats endpoint |

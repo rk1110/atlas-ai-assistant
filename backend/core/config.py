@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str | None = None
 
+    # --- App behaviour ---
+    assistant_name: str = "Atlas"  # fills $assistant_name in prompts; rename the product here
+
     # --- Versioned config that lives in the repo, not in .env ---
     models_file: Path = REPO_ROOT / "config" / "models.yaml"
     prompts_dir: Path = REPO_ROOT / "prompts"

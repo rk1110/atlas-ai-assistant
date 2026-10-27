@@ -13,6 +13,7 @@ from fastapi import Depends
 from core.config import Settings, get_settings
 from core.llm import LLMGateway
 from core.model_catalog import ModelCatalog
+from core.prompts import PromptRegistry
 
 
 @lru_cache
@@ -26,6 +27,12 @@ def get_gateway() -> LLMGateway:
     return LLMGateway(get_catalog())
 
 
+@lru_cache
+def get_prompts() -> PromptRegistry:
+    return PromptRegistry.from_directory(get_settings().prompts_dir)
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 CatalogDep = Annotated[ModelCatalog, Depends(get_catalog)]
 GatewayDep = Annotated[LLMGateway, Depends(get_gateway)]
+PromptsDep = Annotated[PromptRegistry, Depends(get_prompts)]
