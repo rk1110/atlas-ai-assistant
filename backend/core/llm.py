@@ -69,19 +69,25 @@ LLMErrorKind = Literal[
     "context_too_long",
     "refusal",
     "timeout",
+    "billing",
     "provider_error",
 ]
 
 
 class LLMError(Exception):
     """A model call failed. `kind` lets callers react (retry? tell the user to add a key?)
-    without depending on any provider's or LiteLLM's exception classes."""
+    without depending on any provider's or LiteLLM's exception classes.
 
-    def __init__(self, kind: LLMErrorKind, message: str, model_id: str):
-        super().__init__(message)
+    `message` is short and safe to show users; `detail` is the provider's raw error
+    (redacted), meant for logs and debugging only.
+    """
+
+    def __init__(self, kind: LLMErrorKind, message: str, model_id: str, detail: str | None = None):
+        super().__init__(f"{message} ({detail})" if detail else message)
         self.kind = kind
         self.message = message
         self.model_id = model_id
+        self.detail = detail
 
 
 class LLMGateway:
@@ -195,6 +201,7 @@ class LLMGateway:
                 "billing",
                 "No API credit for this provider: add credit or pick another model",
                 entry.id,
+                detail,
             )
         checks: list[tuple[type[Exception], LLMErrorKind, str]] = [
             (
@@ -216,8 +223,8 @@ class LLMGateway:
         ]
         for exc_type, kind, summary in checks:
             if isinstance(exc, exc_type):
-                return LLMError(kind, f"{summary}: {detail}", entry.id)
-        return LLMError("provider_error", f"Model call failed: {detail}", entry.id)
+                return LLMError(kind, summary, entry.id, detail)
+        return LLMError("provider_error", "Model call failed", entry.id, detail)
 
     def _redact(self, text: str) -> str:
         """Belt and braces: never let an API key leak into an error message or log."""

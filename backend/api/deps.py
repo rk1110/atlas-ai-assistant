@@ -12,10 +12,11 @@ from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import Settings, get_settings
-from core.db import get_session
+from core.db import get_session, get_session_factory
 from core.llm import LLMGateway
 from core.model_catalog import ModelCatalog
 from core.prompts import PromptRegistry
+from services.chat_service import ChatService
 
 
 @lru_cache
@@ -34,8 +35,14 @@ def get_prompts() -> PromptRegistry:
     return PromptRegistry.from_directory(get_settings().prompts_dir)
 
 
+@lru_cache
+def get_chat_service() -> ChatService:
+    return ChatService(get_gateway(), get_prompts(), get_settings(), get_session_factory())
+
+
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 CatalogDep = Annotated[ModelCatalog, Depends(get_catalog)]
 GatewayDep = Annotated[LLMGateway, Depends(get_gateway)]
 PromptsDep = Annotated[PromptRegistry, Depends(get_prompts)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
+ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]

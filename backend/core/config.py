@@ -37,6 +37,7 @@ class Settings(BaseSettings):
 
     # --- App behaviour ---
     assistant_name: str = "Atlas"  # fills $assistant_name in prompts; rename the product here
+    chat_history_limit: int = 20  # messages re-sent to the model each turn (short-term memory)
 
     # --- Versioned config that lives in the repo, not in .env ---
     models_file: Path = REPO_ROOT / "config" / "models.yaml"

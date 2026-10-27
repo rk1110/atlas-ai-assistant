@@ -33,7 +33,7 @@ async def smoke(model_id: str) -> None:
                     f"total {chunk.latency_ms} ms | finish={chunk.finish_reason}"
                 )
     except LLMError as err:
-        print(f"[{err.kind}] {err.message}")
+        print(f"[{err.kind}] {err.message}\n    detail (logs only): {err.detail}")
 
 
 async def main(model_ids: list[str]) -> None:

@@ -4,14 +4,21 @@ Routers live in `api/`; this file only wires them together, so adding a feature 
 a router file and one `include_router` line, never editing existing routes.
 """
 
+import logging
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from api import models
+from api import chat, conversations, models
 from api.deps import SessionDep
 
+# Show our own INFO logs (uvicorn only configures its own loggers).
+logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
 app = FastAPI(title="Atlas API", version="0.1.0")
+app.include_router(chat.router)
+app.include_router(conversations.router)
 app.include_router(models.router)
 
 

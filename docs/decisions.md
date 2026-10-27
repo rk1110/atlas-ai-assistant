@@ -92,3 +92,18 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 | Role enforced by a `CHECK` constraint; cascade delete via `ON DELETE CASCADE` | Integrity enforced by the database itself, even if app code has a bug | App-level validation only |
 | `/health/ready` (touches DB) separate from `/health` (no I/O) | Liveness vs readiness: a DB outage should stop traffic, not restart a healthy process | One combined check |
 | Eval tables deferred to step 8 as migration `0002` | Keeps each migration about one feature, and shows the second-migration workflow | Put them in 0001 |
+
+## 2026-10-27 · Phase 1 step 4a (streaming chat endpoint)
+
+| Decision | Why | Alternatives considered |
+| --- | --- | --- |
+| Chat logic in `services/chat_service.py`, route stays thin | Eval runner and UI run the exact same code; testable without HTTP | Logic inside the route |
+| Stream always ends with `done` (outer try/except emits `error` + `done` on anything) | Frontend can rely on one rule to stop spinners; no half-open streams | Let exceptions break the connection |
+| Validate model id **before** streaming (HTTP 400); later failures are `error` events | Once the 200 and first bytes are sent the status code can't change | Everything as stream events (worse for API clients) |
+| Service opens its own DB sessions inside the generator | A StreamingResponse keeps running after the route returns; request-scoped sessions may be closed by then | `SessionDep` in the chat route (subtle bugs across FastAPI versions) |
+| User message committed before the LLM call; partial answers saved with `error_code` | A failed answer never loses the question; partial answers are visible but excluded from the model's history | Save both at the end (a failure loses everything) |
+| `LLMError.message` (user-safe) vs `.detail` (logs only) | Users see "No API credit..."; raw provider JSON and request ids stay in server logs | One message for both (leaks provider internals to the UI) |
+| History = last 20 user/assistant messages (`chat_history_limit`) | Model APIs are stateless: history is re-sent each turn, so cost and context grow with length | Whole conversation (unbounded); summarisation (Phase 4 memory) |
+| SSE headers `Cache-Control: no-cache`, `X-Accel-Buffering: no` | Proxies (nginx in Phase 7) must not buffer or cache a live stream | Defaults (tokens can arrive in one delayed burst behind a proxy) |
+| Known limitation: client disconnect mid-stream doesn't save the partial answer | Handled with the Stop button in step 7 (needs cancellation-safe saving) | Solve now (more complexity before there's a UI to need it) |
+| Fixed: `"billing"` missing from `LLMErrorKind` (an edit in 3a silently didn't apply) | A step 9 test will assert `LLMErrorKind` ⊆ `ErrorCode` so the two can't drift | — |
