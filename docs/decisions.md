@@ -145,3 +145,17 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 | `shadcn@4.23.0` (published 2026-10-27) as a **devDependency** | 4.21.4 pulled a zod version with a high-severity DoS (npm audit); 4.23.0 fixes it. Only needed at build time (CLI + `shadcn/tailwind.css`) | Keep 4.21.4 (vulnerable); runtime dependency |
 | Only messages created during the visit animate in (`live` flag) | History must be visible in server-rendered HTML; `initial={opacity:0}` hid it until JS loaded (caught by a headless screenshot) | Animate everything |
 | Atlas theme: cool neutrals + teal accent (OKLCH tokens), same accent as the Atlas Map | A product identity instead of shadcn's default greys | Default theme |
+
+## 2026-10-27 · Phase 1 checkpoint C (evals, tests, docs)
+
+| Decision | Why | Alternatives considered |
+| --- | --- | --- |
+| Evals call `ChatService.answer()`: same prompt, gateway and tracing as chat, no history, nothing saved to conversations | Measures what users get without filling the sidebar with test chats | Call the HTTP endpoint (pollutes history); call the gateway directly (skips the prompt path) |
+| Evals answer with the **chat** model by default; the cheap model is reserved for grading (Phase 3) | Evals must measure the production path | Cheap model (measures the wrong thing) |
+| Eval runs in Postgres (`eval_runs` + `eval_results`, migration 0002) + JSON report + Langfuse session per run | Principle 5 (one DB), easy diffing (JSON), drill-down (traces) | Files only |
+| Golden set: kebab-case ids, YAML, validated by Pydantic; Acme expected answers define the facts the Phase 2 corpus must contain | Stable ids make runs comparable; validation catches typos before spending money | CSV; free-form questions |
+| Baseline (2026-10-27, gpt-oss-120b): GitLab questions answered from general knowledge; Acme questions correctly refused ("don't have that information") | The system prompt's "don't guess company facts" rule works; Phase 2 RAG must turn those refusals into cited answers | — |
+| Tests on the host (`uv run pytest`) against `atlas_test`, migrated with Alembic once per session, tables truncated per DB test | Same schema path as production; real Postgres (pgvector) | SQLite; `create_all()` (skips migrations) |
+| One event loop per test session (pytest-asyncio config) | The cached async engine's pooled connections are bound to the loop that created them | Per-test loops + engine per test |
+| `FakeGateway` via `app.dependency_overrides` | Fast (1.3 s for 39 tests), free, deterministic; asserts on exactly what the model was sent | Mock LiteLLM HTTP calls (brittle) |
+| Cross-language drift tests: Python `LLMErrorKind` ⊆ `ErrorCode`, and TS `lib/events.ts` event types + error codes == Python | The contract lives in three places; a test now fails on mismatch (verified by deliberately breaking it) | Code generation from JSON Schema (heavier; revisit if the contract grows) |

@@ -33,6 +33,9 @@ class Settings(BaseSettings):
 
     # --- Data stores ---
     database_url: str
+    test_database_url: str | None = (
+        None  # pytest swaps this in for database_url (tests/conftest.py)
+    )
     redis_url: str | None = None
 
     # --- Observability (Langfuse). Keys missing = tracing off, app still works ---

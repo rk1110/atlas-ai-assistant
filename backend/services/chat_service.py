@@ -55,6 +55,16 @@ class ChatRequest(BaseModel):
     model_id: str | None = None  # None = the catalog's default chat model
 
 
+class AnswerResult(BaseModel):
+    """Result of a one-shot answer (no conversation). Used by the eval runner."""
+
+    answer: str
+    error_code: str | None
+    completion: Completion | None
+    prompt_ref: str
+    trace_id: str | None
+
+
 class ChatService:
     def __init__(
         self,
@@ -209,6 +219,50 @@ class ChatService:
             .limit(self._settings.chat_history_limit)
         )
         return [ChatMessage(role=m.role, content=m.content) for m in reversed(rows.all())]
+
+    async def answer(
+        self,
+        question: str,
+        model_id: str,
+        *,
+        trace_name: str = "answer",
+        session_id: str | None = None,
+        tags: list[str] | None = None,
+    ) -> AnswerResult:
+        """Answer one question with the same system prompt, gateway and tracing as the chat,
+        but with no history and nothing saved. The eval runner uses this, so evals measure
+        what users get without filling the conversation list with test chats."""
+        prompt = self._render_system_prompt()
+        trace = self._tracer.start_trace(
+            trace_name, input=question, session_id=session_id, tags=tags
+        )
+        messages = [
+            ChatMessage(role="system", content=prompt.text),
+            ChatMessage(role="user", content=question),
+        ]
+        parts: list[str] = []
+        completion: Completion | None = None
+        error_code: str | None = None
+        try:
+            async for chunk in self._gateway.stream_chat(
+                model_id, messages, trace=trace, name="chat", prompt_ref=prompt.ref
+            ):
+                if isinstance(chunk, TextDelta):
+                    parts.append(chunk.text)
+                else:
+                    completion = chunk
+        except LLMError as err:
+            error_code = err.kind
+            logger.warning("answer failed [%s] for %s: %s", err.kind, model_id, err.detail)
+        answer = "".join(parts)
+        trace.finish(output=answer or None, error=error_code)
+        return AnswerResult(
+            answer=answer,
+            error_code=error_code,
+            completion=completion,
+            prompt_ref=prompt.ref,
+            trace_id=trace.trace_id,
+        )
 
     def _render_system_prompt(self) -> RenderedPrompt:
         return self._prompts.render(

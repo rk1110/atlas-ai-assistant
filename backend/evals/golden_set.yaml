@@ -1,0 +1,56 @@
+# Atlas golden set: questions with known answers, used to measure every change.
+#
+# Format (validated by evals/schema.py):
+#   id               stable, unique, kebab-case. Never reuse an id for a different question:
+#                    results are compared across runs by id.
+#   question         exactly what a user would type
+#   expected_answer  the facts a correct answer must contain (not the exact wording)
+#   expected_sources document ids that contain the answer. Phase 2 measures whether retrieval
+#                    finds them (hit rate, MRR). Ids are "<source>:<path>" like Document.id.
+#   tags             for filtering runs: --tag gitlab
+#
+# Phase 1 has no retrieval, so answers come from the model's general knowledge: expect GitLab
+# questions to be partly right and Acme questions to fail. That baseline is the point: Phase 2
+# must beat it. Target: 20 questions in Phase 1 (5 here, 15 for you to add), 50 by Phase 3.
+#
+# Acme Corp is fictional. Its expected answers DEFINE facts that the Acme corpus generated in
+# Phase 2 must contain, so keep them specific and consistent.
+
+version: 1
+
+questions:
+  - id: gitlab-values
+    question: What are GitLab's core values?
+    expected_answer: >
+      Six values, known by the acronym CREDIT: Collaboration, Results for customers,
+      Efficiency, Diversity Inclusion and Belonging, Iteration, and Transparency.
+    expected_sources: ["gitlab-handbook:/handbook/values/"]
+    tags: [gitlab, culture]
+
+  - id: gitlab-mission
+    question: What is GitLab's mission?
+    expected_answer: To make it so that everyone can contribute.
+    expected_sources: ["gitlab-handbook:/handbook/company/mission/"]
+    tags: [gitlab, company]
+
+  - id: gitlab-all-remote
+    question: Does GitLab have offices, or is it a remote company?
+    expected_answer: >
+      GitLab is an all-remote company: there are no company offices, and team members work
+      from their own locations around the world.
+    expected_sources: ["gitlab-handbook:/handbook/company/culture/all-remote/"]
+    tags: [gitlab, culture]
+
+  - id: acme-parental-leave
+    question: How many weeks of paid parental leave does Acme Corp offer?
+    expected_answer: >
+      16 weeks of fully paid parental leave for all parents, available within the first
+      year after a birth or adoption.
+    expected_sources: ["acme-docs:hr/parental-leave-policy.md"]
+    tags: [acme, hr, policy]
+
+  - id: acme-expense-limit
+    question: How much can I spend on a client dinner at Acme without manager approval?
+    expected_answer: Up to $75 per person; anything above that needs manager approval first.
+    expected_sources: ["acme-docs:finance/expense-policy.md"]
+    tags: [acme, finance, policy]

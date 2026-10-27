@@ -65,18 +65,36 @@ Pin exact versions of all dependencies. Before adding any new library, tell me w
 ## Common commands (keep this section updated)
 
 ```bash
-docker compose up -d          # start the full stack
-docker compose logs -f backend
-cd backend && pytest          # backend tests
-cd backend && python -m evals.run   # run eval suite
-cd frontend && npm run dev    # frontend dev server (if not in Docker)
+docker compose up -d                       # start the full stack (8 services); `docker compose ps` = health
+docker compose logs -f backend             # follow backend logs
+docker compose restart backend             # after editing config/models.yaml or prompts/*.yaml
+docker compose up -d --build backend       # after changing backend dependencies (pyproject/uv.lock)
+docker compose up -d --build -V frontend   # after changing frontend dependencies (-V renews node_modules)
+
+cd backend && uv run pytest                # backend tests (on your Mac; uses the atlas_test DB, fake LLM)
+cd backend && uv run ruff check . && uv run ruff format .   # lint + format
+docker compose exec backend python -m evals.run             # eval suite (real model calls)
+docker compose exec backend python -m evals.run --model gpt-oss-20b-cloud --notes "what changed"
+docker compose exec backend python -m scripts.smoke_llm     # one streamed reply per model
+
+docker compose exec backend alembic revision --autogenerate --rev-id 000N -m "what"  # new migration (review it!)
+docker compose exec backend alembic upgrade head            # apply migrations (also runs on backend start)
+
+cd frontend && npm run lint && npx tsc --noEmit             # frontend lint + type check
+cd frontend && npm run dev                                  # frontend outside Docker
 ```
+
+| URL | What |
+| --- | --- |
+| http://localhost:3000 | Atlas web app |
+| http://localhost:8000/docs | Backend API docs |
+| http://localhost:3001 | Langfuse (traces; login from `.env`) |
 
 ## Phase status (update when a phase is done)
 
 | Phase | Name | Status |
 | --- | --- | --- |
-| 1 | Foundation (app shell, streaming chat, gateway, tracing, eval scaffold) | Not started |
+| 1 | Foundation (app shell, streaming chat, gateway, tracing, eval scaffold) | In progress: all 9 build steps done; walkthrough, exercises, quiz pending |
 | 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | Not started |
 | 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Not started |
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Not started |
