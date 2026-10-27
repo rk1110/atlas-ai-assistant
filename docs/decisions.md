@@ -64,3 +64,15 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 | SSE frames carry only `data: <json>` (type inside the JSON), no `event:` line | One parsing rule on the frontend: split on blank lines, parse JSON, switch on `type` | Named SSE events (`event: token`), useful with `EventSource` listeners, but we use `fetch` streams (POST body) |
 | `ErrorEvent.retryable` + user-safe `message` | UI shows "Try again" only when it can help; never leaks stack traces or secrets | Raw exception text |
 | `DoneEvent` carries `usage`, `prompt_ref`, optional `trace_id` | Analytics and "view trace" links get everything from the stream; `trace_id` stays optional until step 5 | Separate stats endpoint |
+
+## 2026-10-27 · Phase 1 step 3c (core interfaces)
+
+| Decision | Why | Alternatives considered |
+| --- | --- | --- |
+| `DataSource.load()` is an **async iterator** of `Document`s (plan said `-> list[Document]`) | The GitLab handbook has thousands of pages; streaming lets ingestion process each one as it arrives instead of holding all in memory | Return a list (simple, doesn't scale) |
+| `Document.access_tags` (default `["public"]`) exists from day one | Phase 7 permission-aware retrieval filters on it; adding it later would mean re-ingesting everything | Add in Phase 7 |
+| Retriever wrappers (hybrid, reranking) compose other `Retriever`s | Any combination can be built and A/B tested with evals without new subclasses | Inheritance hierarchy |
+| `Tool` is generic over a Pydantic input model; its JSON schema is what the model sees | One definition gives the model's schema AND server-side validation of the model's arguments | Hand-written JSON schemas (drift from the code) |
+| `ToolResult` returns errors as values | The model sees "error: ..." and can recover; an exception would end the agent turn | Raise exceptions |
+| `Tool.requires_approval` class flag | Write tools are marked once; the agent runtime (Phase 4) enforces the approval step centrally | Each tool implementing its own approval check |
+| `Agent` interface does not import LangGraph; agents return partial state updates and stream via `emit` | Agents depend on our types only; a thin adapter makes them LangGraph nodes. Partial updates match LangGraph's merge semantics | Subclass LangGraph types directly (framework lock-in) |
