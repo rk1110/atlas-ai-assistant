@@ -10,6 +10,8 @@
 #   params           passed straight to litellm.acompletion() for this model
 #   extra_headers /
 #   extra_body       provider-specific request fields LiteLLM forwards untouched
+#   structured_output  "native" (default): provider enforces JSON schemas; "prompt": it doesn't,
+#                    so the schema goes in the prompt and the reply is validated + retried once
 #
 # Changing a model is a config change, not a code change (principle 2 + 8).
 
@@ -52,6 +54,7 @@ models:
     litellm_model: ollama_chat/gpt-oss:120b
     api_key_setting: ollama_api_key
     api_base: https://ollama.com
+    structured_output: prompt   # Ollama Cloud ignores JSON schemas (tested 2026-10-27)
     params:
       max_tokens: 4096
       # Temperature = randomness of token sampling. 0 = always the most likely token
@@ -64,6 +67,7 @@ models:
     litellm_model: ollama_chat/gpt-oss:20b
     api_key_setting: ollama_api_key
     api_base: https://ollama.com
+    structured_output: prompt   # Ollama Cloud ignores JSON schemas (tested 2026-10-27)
     params:
       max_tokens: 2048
       temperature: 0.2   # low randomness: classification should give the same answer every time

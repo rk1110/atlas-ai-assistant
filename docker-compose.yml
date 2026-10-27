@@ -54,7 +54,7 @@ services:
       test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 10 
 
   redis:
     # Shared by Langfuse (job queue) and Atlas (cache/queue in later phases).
@@ -184,6 +184,7 @@ services:
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse-web:3000}
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?set in .env}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?set in .env}
+      OTEL_SERVICE_NAME: atlas-backend  # how this service is labelled on every trace
     extra_hosts:
       - "host.docker.internal:host-gateway" # reach Ollama on your Mac (also needed on Linux)
     ports:

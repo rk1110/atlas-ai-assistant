@@ -16,7 +16,9 @@ from core.db import get_session, get_session_factory
 from core.llm import LLMGateway
 from core.model_catalog import ModelCatalog
 from core.prompts import PromptRegistry
+from core.tracing import Tracer, get_tracer
 from services.chat_service import ChatService
+from services.intent import IntentClassifier
 
 
 @lru_cache
@@ -27,7 +29,7 @@ def get_catalog() -> ModelCatalog:
 
 @lru_cache
 def get_gateway() -> LLMGateway:
-    return LLMGateway(get_catalog())
+    return LLMGateway(get_catalog(), get_tracer())
 
 
 @lru_cache
@@ -37,7 +39,14 @@ def get_prompts() -> PromptRegistry:
 
 @lru_cache
 def get_chat_service() -> ChatService:
-    return ChatService(get_gateway(), get_prompts(), get_settings(), get_session_factory())
+    return ChatService(
+        get_gateway(), get_prompts(), get_settings(), get_session_factory(), get_tracer()
+    )
+
+
+@lru_cache
+def get_classifier() -> IntentClassifier:
+    return IntentClassifier(get_gateway(), get_prompts(), get_catalog())
 
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
@@ -46,3 +55,5 @@ GatewayDep = Annotated[LLMGateway, Depends(get_gateway)]
 PromptsDep = Annotated[PromptRegistry, Depends(get_prompts)]
 SessionDep = Annotated[AsyncSession, Depends(get_session)]
 ChatServiceDep = Annotated[ChatService, Depends(get_chat_service)]
+TracerDep = Annotated[Tracer, Depends(get_tracer)]
+ClassifierDep = Annotated[IntentClassifier, Depends(get_classifier)]

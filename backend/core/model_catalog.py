@@ -11,7 +11,7 @@ Why a catalog instead of passing raw model strings around:
 
 import asyncio
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 from urllib.parse import urlparse
 
 import yaml
@@ -31,6 +31,9 @@ class ModelEntry(BaseModel):
     api_base: str | None = None
     api_base_setting: str | None = None
     params: dict[str, Any] = Field(default_factory=dict)
+    # How complete_structured gets JSON: "native" = provider enforces the schema,
+    # "prompt" = schema described in the prompt + validation + one retry.
+    structured_output: Literal["native", "prompt"] = "native"
     extra_headers: dict[str, str] = Field(default_factory=dict)
     extra_body: dict[str, Any] = Field(default_factory=dict)
 

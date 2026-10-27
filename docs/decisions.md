@@ -107,3 +107,22 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 | SSE headers `Cache-Control: no-cache`, `X-Accel-Buffering: no` | Proxies (nginx in Phase 7) must not buffer or cache a live stream | Defaults (tokens can arrive in one delayed burst behind a proxy) |
 | Known limitation: client disconnect mid-stream doesn't save the partial answer | Handled with the Stop button in step 7 (needs cancellation-safe saving) | Solve now (more complexity before there's a UI to need it) |
 | Fixed: `"billing"` missing from `LLMErrorKind` (an edit in 3a silently didn't apply) | A step 9 test will assert `LLMErrorKind` ⊆ `ErrorCode` so the two can't drift | — |
+
+## 2026-10-27 · Phase 1 checkpoint A (structured output + Langfuse tracing)
+
+| Decision | Why | Alternatives considered |
+| --- | --- | --- |
+| `LLMGateway.complete_structured(schema=PydanticModel)` via LiteLLM `response_format`, then **re-validate** with Pydantic | Provider-side constrained decoding makes the JSON valid; our own validation means a provider bug surfaces as `invalid_output`, not a crash | Prompt-only "reply in JSON" + parse (fragile); tool-calling tricks to force JSON |
+| `reasoning` field first in `IntentClassification` | Models generate left to right; a one-line justification before the label improves accuracy and explains mistakes | Label only (cheaper, less accurate, no explanation) |
+| Classifier uses the catalog's **cheap** model by default | Classification will run on every message (Phase 4 routing); it doesn't need the strongest model | Main chat model |
+| Langfuse SDK `4.17.0` (not 5.x) | 5.0 is < 14 days old; the 4.x SDK line matches our 4.55 server | Latest 5.0.4 |
+| `core/tracing.py` wrapper; no other module imports `langfuse` | Same reason as the LLM gateway: one place to change, and a no-op fallback | Call the SDK everywhere; LiteLLM's built-in Langfuse callback (less control over trace structure) |
+| Tracing never breaks the app (missing keys, server down, SDK error = warning + no-op) | Observability is important but must not take chat down with it | Fail requests when tracing fails |
+| **Explicit** parent→child observations, `propagate_attributes` only around span creation | Streaming generators pause at every `yield`; "current span" context can leak or break across those pauses | `with start_as_current_observation(...)` spanning the stream |
+| One trace per chat turn, `session_id` = conversation id; one generation per model call | Sessions view replays a conversation; each generation has model, params, tokens, cost, TTFT, prompt version | One trace per conversation (unbounded, hard to read) |
+| Prompt version recorded as the generation's `version` + metadata | Filterable in Langfuse; Langfuse's native prompt linking needs Langfuse-managed prompts, which we don't use yet | Move prompts into Langfuse prompt management |
+| Flush on app shutdown and at the end of scripts | Spans are exported in background batches; a fast exit would drop them | Synchronous export per span (slow) |
+| `/api/classify` maps error kinds to HTTP statuses (402 billing, 429 rate limit, 502 invalid output...) | Non-streaming endpoints can and should use real status codes | Always 500 |
+| **Per-model `structured_output: native | prompt`**; Ollama Cloud models use `prompt` | Tested 2026-10-27: Ollama Cloud ignores the JSON-schema `format` field for every model tried (even calling Ollama's API directly), so native mode returned plain text. Prompt mode = schema in the system prompt, fence-stripping, Pydantic validation, one retry with the exact validation error | Switch providers just for classification; prompt mode everywhere (wastes native enforcement where it exists) |
+| Prompt mode costs ~330 extra input tokens per call (the schema text) | Accepted for Phase 1; Phase 7 cost work can shorten schemas or switch the cheap model to a native-schema provider | — |
+| Langfuse v4 API: read traces via `/api/public/v2/observations` | The server runs in v4 "events_only" mode, where the old `/traces` endpoints return 404 | — |

@@ -12,6 +12,7 @@ import sys
 
 from api.deps import get_catalog, get_gateway
 from core.llm import ChatMessage, Completion, LLMError, TextDelta
+from core.tracing import get_tracer
 
 PROMPT = [
     ChatMessage(role="system", content="You are a concise assistant."),
@@ -32,6 +33,7 @@ async def smoke(model_id: str) -> None:
                     f"cost {cost} | first token {chunk.time_to_first_token_ms} ms | "
                     f"total {chunk.latency_ms} ms | finish={chunk.finish_reason}"
                 )
+                print(f"    trace: {get_tracer().trace_url(chunk.trace_id)}")
     except LLMError as err:
         print(f"[{err.kind}] {err.message}\n    detail (logs only): {err.detail}")
 
@@ -39,6 +41,7 @@ async def smoke(model_id: str) -> None:
 async def main(model_ids: list[str]) -> None:
     for model_id in model_ids or [entry.id for entry in get_catalog().list()]:
         await smoke(model_id)
+    get_tracer().flush()  # scripts exit fast: send buffered traces before the process ends
 
 
 if __name__ == "__main__":

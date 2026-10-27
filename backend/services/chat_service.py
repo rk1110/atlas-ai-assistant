@@ -33,6 +33,7 @@ from core.events import (
 )
 from core.llm import ChatMessage, Completion, LLMError, LLMGateway, TextDelta
 from core.prompts import PromptRegistry, RenderedPrompt
+from core.tracing import Span, Tracer
 from models import Conversation, Message
 
 logger = logging.getLogger(__name__)
@@ -55,28 +56,41 @@ class ChatService:
         prompts: PromptRegistry,
         settings: Settings,
         session_factory: async_sessionmaker[AsyncSession],
+        tracer: Tracer,
     ):
         self._gateway = gateway
         self._prompts = prompts
         self._settings = settings
         self._session_factory = session_factory
+        self._tracer = tracer
 
     async def stream_reply(self, request: ChatRequest, model_id: str) -> AsyncIterator[StreamEvent]:
-        """Public entry point. Guarantees the stream ends with `done`, whatever happens inside."""
+        """Public entry point. Guarantees the stream ends with `done`, whatever happens inside.
+
+        Each turn is one Langfuse trace; its session id is the conversation id, so Langfuse's
+        Sessions view replays a whole conversation turn by turn.
+        """
+        trace = self._tracer.start_trace(
+            "chat_turn",
+            input=request.message,
+            session_id=str(request.conversation_id),
+            metadata={"model_id": model_id},
+        )
         try:
-            async for event in self._stream_reply(request, model_id):
+            async for event in self._stream_reply(request, model_id, trace):
                 yield event
         except Exception:
             # Anything unexpected (DB down, a bug): log the full traceback for us,
             # send the user a generic message (never internals), and still close cleanly.
             logger.exception("chat turn failed for conversation %s", request.conversation_id)
+            trace.finish(error="internal error")
             yield ErrorEvent(
                 code="internal", message="Something went wrong on our side.", retryable=True
             )
-            yield DoneEvent(message_id=None)
+            yield DoneEvent(message_id=None, trace_id=trace.trace_id)
 
     async def _stream_reply(
-        self, request: ChatRequest, model_id: str
+        self, request: ChatRequest, model_id: str, trace: Span
     ) -> AsyncIterator[StreamEvent]:
         # A session opened HERE, inside the stream, not taken from the request: the response
         # keeps streaming after the route function returns, when request-scoped resources
@@ -97,7 +111,9 @@ class ChatService:
         completion: Completion | None = None
         error: ErrorEvent | None = None
         try:
-            async for chunk in self._gateway.stream_chat(model_id, llm_messages):
+            async for chunk in self._gateway.stream_chat(
+                model_id, llm_messages, trace=trace, name="chat", prompt_ref=prompt.ref
+            ):
                 if isinstance(chunk, TextDelta):
                     answer_parts.append(chunk.text)
                     yield TokenEvent(text=chunk.text)
@@ -110,10 +126,11 @@ class ChatService:
             )
 
         answer = "".join(answer_parts)
+        trace.finish(output=answer or None, error=error.message if error else None)
         message_id: uuid.UUID | None = None
         if answer:  # save complete answers, and partial ones cut off by an error
             message_id = await self._save_assistant_message(
-                request.conversation_id, answer, model_id, prompt, completion, error
+                request.conversation_id, answer, model_id, prompt, completion, error, trace.trace_id
             )
 
         if error:
@@ -122,6 +139,7 @@ class ChatService:
             message_id=str(message_id) if message_id else None,
             usage=_usage(model_id, completion),
             prompt_ref=prompt.ref,
+            trace_id=trace.trace_id,
         )
 
     async def _get_or_create_conversation(
@@ -172,6 +190,7 @@ class ChatService:
         prompt: RenderedPrompt,
         completion: Completion | None,
         error: ErrorEvent | None,
+        trace_id: str | None,
     ) -> uuid.UUID:
         async with self._session_factory() as session:
             message = Message(
@@ -181,6 +200,7 @@ class ChatService:
                 model_id=model_id,
                 prompt_ref=prompt.ref,
                 error_code=error.code if error else None,
+                trace_id=trace_id,
             )
             if completion:
                 message.input_tokens = completion.input_tokens

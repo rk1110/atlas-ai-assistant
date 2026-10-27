@@ -5,19 +5,32 @@ a router file and one `include_router` line, never editing existing routes.
 """
 
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from api import chat, conversations, models
+from api import chat, classify, conversations, models
 from api.deps import SessionDep
+from core.tracing import get_tracer
 
 # Show our own INFO logs (uvicorn only configures its own loggers).
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
-app = FastAPI(title="Atlas API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Startup/shutdown hook. On shutdown, flush buffered traces so the last requests
+    before a restart still show up in Langfuse."""
+    yield
+    get_tracer().flush()
+
+
+app = FastAPI(title="Atlas API", version="0.1.0", lifespan=lifespan)
 app.include_router(chat.router)
+app.include_router(classify.router)
 app.include_router(conversations.router)
 app.include_router(models.router)
 

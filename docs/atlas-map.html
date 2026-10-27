@@ -1,0 +1,417 @@
+<title>Atlas Map</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a survey sheet. Header with position fix, then the request "route" drawn across six
+   map layers (browser → data), then the eight-phase roadmap as a legend-coded strip. */
+:root {
+  --paper: #eef2f5;        /* page ground: cool survey-sheet grey-blue */
+  --sheet: #f9fbfc;        /* raised surfaces */
+  --ink: #16242f;          /* primary text */
+  --ink-2: #4a5d6b;        /* secondary text */
+  --rule: #c9d4dc;         /* hairlines, grid */
+  --route: #0b7a75;        /* accent: the request route / "built" */
+  --route-soft: #d3ece9;
+  --next: #b4630b;         /* amber: the next checkpoint */
+  --next-soft: #f6e6d2;
+  --later: #7d8b96;        /* not yet */
+  --font-display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0f1a22; --sheet: #15232d; --ink: #e3ecf1; --ink-2: #9db0bd; --rule: #2a3c48;
+    --route: #3cc4b9; --route-soft: #123a3a; --next: #f0a24b; --next-soft: #3a2a17; --later: #6d7f8b;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0f1a22; --sheet: #15232d; --ink: #e3ecf1; --ink-2: #9db0bd; --rule: #2a3c48;
+  --route: #3cc4b9; --route-soft: #123a3a; --next: #f0a24b; --next-soft: #3a2a17; --later: #6d7f8b;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+}
+.wrap {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding-block: 28px 64px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 40px;
+}
+h1, h2 { font-family: var(--font-display); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: clamp(2rem, 5vw, 2.9rem); font-weight: 700; line-height: 1.05; }
+h2 { font-size: 1.45rem; font-weight: 700; }
+p { margin: 0; }
+code, .mono { font-family: var(--font-mono); font-size: 0.86em; }
+.label {
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em; color: var(--ink-2); font-weight: 600;
+}
+
+/* ---------- header ---------- */
+.head { display: grid; gap: 14px; }
+.fix {
+  display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: baseline;
+  font-family: var(--font-mono); font-size: 0.82rem; color: var(--ink-2);
+}
+.fix b { color: var(--ink); font-weight: 500; }
+.lede { max-width: 62ch; color: var(--ink-2); }
+
+/* ---------- legend chips ---------- */
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 2px 9px; border-radius: 999px;
+  font-size: 0.74rem; font-weight: 600; letter-spacing: 0.02em; white-space: nowrap;
+}
+.chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.chip.built { color: var(--route); background: var(--route-soft); }
+.chip.next  { color: var(--next);  background: var(--next-soft); }
+.chip.later { color: var(--later); background: transparent; border: 1px dashed var(--later); }
+.legend { display: flex; flex-wrap: wrap; gap: 8px; }
+
+/* ---------- route (request flow) ---------- */
+.route { display: grid; gap: 16px; }
+.route-top { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: end; gap: 12px; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; }
+button {
+  font: inherit; font-weight: 600; font-size: 0.88rem; cursor: pointer;
+  border-radius: 8px; padding: 8px 14px; border: 1px solid var(--rule);
+  background: var(--sheet); color: var(--ink);
+}
+button.primary { background: var(--route); border-color: var(--route); color: var(--sheet); }
+button:focus-visible, .node:focus-visible { outline: 2px solid var(--next); outline-offset: 2px; }
+button:disabled { opacity: 0.45; cursor: default; }
+
+.board { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 820px) { .board { grid-template-columns: minmax(0, 1fr); } }
+
+.layers {
+  border: 1px solid var(--rule); border-radius: 12px; background: var(--sheet);
+  background-image:
+    linear-gradient(var(--rule) 1px, transparent 1px),
+    linear-gradient(90deg, var(--rule) 1px, transparent 1px);
+  background-size: 28px 28px; background-position: -1px -1px;
+  background-blend-mode: normal;
+  padding: 6px 14px;
+  overflow: hidden;
+}
+.layer {
+  display: grid; grid-template-columns: 92px minmax(0, 1fr); gap: 12px; align-items: center;
+  padding-block: 10px; border-bottom: 1px solid var(--rule);
+}
+.layer:last-child { border-bottom: 0; }
+.layer .label { background: var(--sheet); padding: 2px 0; }
+.nodes { display: flex; flex-wrap: wrap; gap: 8px; }
+.node {
+  text-align: left; display: grid; gap: 2px; padding: 8px 11px; border-radius: 8px;
+  background: var(--sheet); border: 1.5px solid var(--rule); color: var(--ink);
+  min-width: 0; max-width: 100%;
+  transition: border-color .2s, box-shadow .2s, transform .2s;
+}
+.node .n-name { font-weight: 600; font-size: 0.88rem; }
+.node .n-file { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.node.built { border-color: var(--route); }
+.node.next { border-color: var(--next); border-style: dashed; }
+.node.later { border-color: var(--later); border-style: dotted; color: var(--ink-2); }
+.node.selected { box-shadow: 0 0 0 3px var(--route-soft); }
+.node.lit { border-color: var(--route); box-shadow: 0 0 0 4px var(--route-soft); transform: translateY(-1px); }
+.node.next.lit { border-color: var(--next); box-shadow: 0 0 0 4px var(--next-soft); }
+@media (max-width: 480px) { .layer { grid-template-columns: minmax(0, 1fr); gap: 6px; } }
+
+.panel {
+  border: 1px solid var(--rule); border-radius: 12px; background: var(--sheet); padding: 18px;
+  display: grid; gap: 12px; position: sticky; top: calc(env(safe-area-inset-top, 0px) + 12px);
+}
+.panel .step-no { font-family: var(--font-mono); font-size: 0.78rem; color: var(--route); }
+.panel h3 { margin: 0; font-family: var(--font-display); font-size: 1.15rem; font-weight: 700; }
+.panel .file { font-family: var(--font-mono); font-size: 0.8rem; color: var(--ink-2); overflow-wrap: anywhere; }
+.panel .concept { border-top: 1px solid var(--rule); padding-top: 10px; font-size: 0.9rem; color: var(--ink-2); }
+.panel .concept strong { color: var(--ink); }
+.wire {
+  font-family: var(--font-mono); font-size: 0.75rem; background: var(--paper); border-radius: 8px;
+  padding: 10px 12px; overflow-x: auto; white-space: pre; color: var(--ink); border: 1px solid var(--rule);
+}
+.progressbar { height: 4px; background: var(--rule); border-radius: 4px; overflow: hidden; }
+.progressbar span { display: block; height: 100%; width: 0; background: var(--route); transition: width .3s; }
+
+/* ---------- roadmap ---------- */
+.roadmap { display: grid; gap: 16px; }
+.phase1 {
+  border: 1px solid var(--rule); border-radius: 12px; background: var(--sheet); padding: 18px;
+  display: grid; gap: 14px;
+}
+.phase1-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px; align-items: baseline; }
+.checkpoints { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .checkpoints { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 440px) { .checkpoints { grid-template-columns: minmax(0, 1fr); } }
+.cp { border-radius: 10px; padding: 12px; display: grid; gap: 8px; align-content: start; border: 1px solid var(--rule); }
+.cp.built { background: var(--route-soft); border-color: transparent; }
+.cp.next { background: var(--next-soft); border-color: transparent; }
+.cp h4 { margin: 0; font-size: 0.9rem; display: flex; justify-content: space-between; gap: 6px; }
+.cp ul { margin: 0; padding-left: 18px; font-size: 0.85rem; color: var(--ink-2); display: grid; gap: 2px; }
+.loop { font-size: 0.85rem; color: var(--ink-2); }
+
+.phases { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
+@media (max-width: 760px) { .phases { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 440px) { .phases { grid-template-columns: minmax(0, 1fr); } }
+.phase { border-top: 3px solid var(--rule); padding-top: 10px; display: grid; gap: 4px; align-content: start; }
+.phase.now { border-top-color: var(--next); }
+.phase .ph-no { font-family: var(--font-mono); font-size: 0.75rem; color: var(--ink-2); }
+.phase .ph-name { font-weight: 600; }
+.phase p { font-size: 0.85rem; color: var(--ink-2); }
+.demo { font-family: var(--font-mono); font-size: 0.72rem; color: var(--next); }
+
+footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rule); padding-top: 14px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .node, .progressbar span { transition: none; }
+}
+</style>
+
+<div class="wrap">
+  <header class="head">
+    <div class="fix">
+      <span>Position: <b>Phase 1 · Foundation</b></span>
+      <span>Next: <b>Checkpoint B of 3 (frontend)</b></span>
+      <span>Updated <b>2026-10-27</b></span>
+    </div>
+    <h1>Atlas Map</h1>
+    <p class="lede">Press play to follow one chat message through the code, from the Enter key to the last token. Click any box to see what it does and which file it lives in.</p>
+    <div class="legend" aria-label="Legend">
+      <span class="chip built">Built and running</span>
+      <span class="chip next">Next checkpoint</span>
+      <span class="chip later">Later phase</span>
+    </div>
+  </header>
+
+  <section class="route" aria-labelledby="route-h">
+    <div class="route-top">
+      <div>
+        <div class="label">Route 1</div>
+        <h2 id="route-h">What happens when you press Enter</h2>
+      </div>
+      <div class="controls">
+        <button id="btn-play" class="primary" type="button">Play request</button>
+        <button id="btn-prev" type="button" aria-label="Previous step">Back</button>
+        <button id="btn-next" type="button" aria-label="Next step">Step</button>
+      </div>
+    </div>
+    <div class="progressbar" aria-hidden="true"><span id="bar"></span></div>
+    <div class="board">
+      <div class="layers" id="layers"></div>
+      <aside class="panel" id="panel" aria-live="polite"></aside>
+    </div>
+  </section>
+
+  <section class="roadmap" aria-labelledby="road-h">
+    <div>
+      <div class="label">Route 2</div>
+      <h2 id="road-h">The eight phases</h2>
+    </div>
+
+    <div class="phase1">
+      <div class="phase1-head">
+        <strong>Phase 1 · Foundation</strong>
+        <span class="mono" style="color:var(--ink-2)">two thirds done · 6 of 9 steps</span>
+      </div>
+      <div class="checkpoints" id="checkpoints"></div>
+      <p class="loop">Then the learning loop: walkthrough doc, 2–3 exercises you write yourself, the quiz, and "break it".</p>
+    </div>
+
+    <div class="phases" id="phases"></div>
+  </section>
+
+  <footer>Atlas · source of truth is <code>docs/PLAN.md</code> · this map lives in <code>docs/atlas-map.html</code> and is updated at every checkpoint.</footer>
+</div>
+
+<script>
+const LAYERS = ["Browser", "API", "Service", "Core", "Providers", "Data"];
+
+const NODES = {
+  chatui:   { layer: "Browser", name: "Chat page", file: "frontend/app/ + lib/use-chat-stream.ts", status: "next",
+              what: "Where you type. Sends your message with fetch() and reads the answer as a stream, appending text as each token arrives.",
+              concept: "<strong>Client component.</strong> It runs in the browser because it needs state and a live stream. Built in checkpoint B." },
+  eventsts: { layer: "Browser", name: "Event types", file: "frontend/lib/events.ts", status: "next",
+              what: "TypeScript copy of the seven event shapes, so the UI knows exactly what each `type` carries.",
+              concept: "<strong>Contract mirror.</strong> Must match core/events.py exactly. A test will keep them in sync." },
+  chatapi:  { layer: "API", name: "POST /api/chat", file: "backend/api/chat.py", status: "built",
+              what: "Checks the request (Pydantic) and the model id before streaming starts, then returns a text/event-stream response.",
+              concept: "<strong>Validate first.</strong> Once streaming starts the HTTP status is already 200, so later problems travel as error events." },
+  convapi:  { layer: "API", name: "Conversations", file: "backend/api/conversations.py", status: "built",
+              what: "List, open and delete past chats. Feeds the sidebar.", concept: "<strong>REST endpoints.</strong> Plain JSON, no streaming." },
+  modelsapi:{ layer: "API", name: "GET /api/models", file: "backend/api/models.py", status: "built",
+              what: "The model dropdown's options, with a live 'available' flag for each.", concept: "<strong>Config-driven UI.</strong> The frontend never hard-codes model names." },
+  service:  { layer: "Service", name: "Chat service", file: "backend/services/chat_service.py", status: "built",
+              what: "Runs one chat turn: save question, load history, render prompt, stream from the gateway, save answer, send done.",
+              concept: "<strong>No HTTP inside.</strong> The eval runner reuses this exact code, so evals test what users get." },
+  prompts:  { layer: "Core", name: "Prompt registry", file: "backend/core/prompts.py + prompts/chat_system.yaml", status: "built",
+              what: "Loads versioned prompts and fills in variables. Every answer records which version produced it.",
+              concept: "<strong>Prompt versioning.</strong> Never edit a used version; add v2 and compare with evals." },
+  catalog:  { layer: "Core", name: "Model catalog", file: "backend/core/model_catalog.py + config/models.yaml", status: "built",
+              what: "Turns 'gpt-oss-cloud' into a provider, model string, API key and parameters.",
+              concept: "<strong>Config, not code.</strong> Switching models is a YAML edit." },
+  gateway:  { layer: "Core", name: "LLM gateway", file: "backend/core/llm.py", status: "built",
+              what: "The only code that calls a model, through LiteLLM. Yields text deltas, then one summary with tokens, cost and latency.",
+              concept: "<strong>One choke point.</strong> Tracing, caching and cost caps get added here once and apply everywhere." },
+  events:   { layer: "Core", name: "Stream events", file: "backend/core/events.py", status: "built",
+              what: "The seven event types and to_sse(), which writes each one as a `data:` line.",
+              concept: "<strong>Discriminated union.</strong> The `type` field says which shape the rest of the JSON has." },
+  tracing:  { layer: "Core", name: "Tracing", file: "backend/core/tracing.py", status: "built",
+              what: "Wraps every model call in a Langfuse trace: prompt version, model, tokens, cost, latency, time to first token.",
+              concept: "<strong>Observability.</strong> See inside every request instead of guessing. If Langfuse is down, chat keeps working." },
+  classify: { layer: "API", name: "POST /api/classify", file: "backend/api/classify.py + services/intent.py", status: "built",
+              what: "Labels a message as question, action_request or chit_chat, returned as validated JSON.",
+              concept: "<strong>Structured output.</strong> The model fills a Pydantic schema. Ollama Cloud ignores schemas, so we put the schema in the prompt, validate, and retry once." },
+  ollamac:  { layer: "Providers", name: "Ollama Cloud", file: "gpt-oss:120b / gpt-oss:20b", status: "built",
+              what: "The default models right now. Hosted open-weight models reached with your OLLAMA_API_KEY.",
+              concept: "<strong>Tokens.</strong> Models read and write small text pieces; you pay and hit limits by token count." },
+  claude:   { layer: "Providers", name: "Claude", file: "claude-sonnet-5-5 / claude-haiku-5-5", status: "built",
+              what: "Wired up, but the account has no API credit yet, so calls return a clean 'billing' error.",
+              concept: "<strong>Graceful failure.</strong> A provider error becomes an error event, never a crash." },
+  ollamal:  { layer: "Providers", name: "Local Ollama", file: "llama3.2 on your Mac", status: "later",
+              what: "Offline, zero-cost models running on your own machine.", concept: "<strong>Self-hosting.</strong> Arrives in Phase 8 with fine-tuning." },
+  postgres: { layer: "Data", name: "Postgres + pgvector", file: "backend/models/ + migrations/0001", status: "built",
+              what: "Stores conversations and messages, with model, prompt version, tokens, cost and latency on every answer.",
+              concept: "<strong>Migrations.</strong> Schema changes are versioned scripts run in order everywhere." },
+  langfuse: { layer: "Data", name: "Langfuse", file: "localhost:3001", status: "built",
+              what: "Receives one trace per chat turn. Sessions view groups a whole conversation; each model call shows tokens, cost and timing.",
+              concept: "<strong>Traces.</strong> A timeline of everything one request did, with timings and costs." },
+  redis:    { layer: "Data", name: "Redis", file: "cache + job queue", status: "later",
+              what: "Used by Langfuse today. Atlas uses it for ingestion jobs (Phase 2) and semantic caching (Phase 7).",
+              concept: "<strong>Cache.</strong> Answer repeated questions without paying for another model call." },
+};
+
+const STEPS = [
+  { node: "chatui",  title: "You press Enter",
+    text: "The chat page sends your message. For a new chat it first makes up a conversation id, so the server never has to send one back.",
+    wire: 'POST /api/chat\n{"conversation_id": "a41c29bd-…",\n "message": "What is an LLM?",\n "model_id": "gpt-oss-cloud"}' },
+  { node: "chatapi", title: "The API checks the request",
+    text: "Pydantic rejects an empty message (422). An unknown model id gets a 400. Only a valid request starts a stream." },
+  { node: "service", title: "The chat service takes over",
+    text: "It opens its own database session inside the stream, because the stream outlives the route function." },
+  { node: "postgres", title: "Your question is saved first",
+    text: "Committed before any model call, so the question survives even if the model fails. Then the last 20 messages are loaded as history." },
+  { node: "prompts", title: "The system prompt is rendered",
+    text: "chat_system@v1 is filled in with the assistant's name and today's date, then placed in front of the history." },
+  { node: "catalog", title: "The model is resolved",
+    text: "'gpt-oss-cloud' becomes ollama_chat/gpt-oss:120b, the Ollama Cloud endpoint, your API key and temperature 0.7." },
+  { node: "gateway", title: "The gateway calls the model",
+    text: "LiteLLM sends one request with stream=True and asks for token counts at the end." },
+  { node: "ollamac", title: "The model generates",
+    text: "About 208 input tokens go in: your question, the history and the system prompt. The first word comes back after roughly 0.8 seconds." },
+  { node: "gateway", title: "Chunks become text deltas",
+    text: "Every chunk of text from the provider becomes a TextDelta. Provider details stay inside the gateway." },
+  { node: "events",  title: "Deltas become SSE events",
+    text: "Each delta is wrapped as a token event and written as one data line, followed by a blank line.",
+    wire: 'data: {"type":"token","text":"A large"}\n\ndata: {"type":"token","text":" language model"}\n' },
+  { node: "chatui",  title: "Text appears as it arrives",
+    text: "The page appends each token to the answer bubble. This is the typing effect." },
+  { node: "postgres", title: "The answer is saved",
+    text: "With provenance: model, prompt version, input and output tokens, cost, latency and time to first token." },
+  { node: "events",  title: "The stream ends with done",
+    text: "Always the last event, even after an error. The spinner stops and the usage numbers are shown.",
+    wire: 'data: {"type":"done","message_id":"eca22f0a-…",\n "usage":{"input_tokens":208,"output_tokens":53,\n "latency_ms":972,"time_to_first_token_ms":819},\n "prompt_ref":"chat_system@v1"}' },
+  { node: "langfuse", title: "Every call is traced",
+    text: "The turn appears in Langfuse as one trace: a chat_turn span holding the model call, tagged with the conversation as its session.",
+    wire: 'trace chat_turn  (session a41c29bd-…)\n  └─ generation chat  gpt-oss:120b\n     278 in / 81 out tokens · $0\n     first token 0.77 s · total 1.11 s\n     version chat_system@v1' },
+];
+
+const CHECKPOINTS = [
+  { name: "Done", status: "built", items: ["1 · Repo skeleton", "2 · Docker stack (8 services)", "3 · Backend core", "4a · Streaming chat API"] },
+  { name: "Checkpoint A", status: "built", items: ["4b · Structured output", "5 · Langfuse tracing"] },
+  { name: "Checkpoint B", status: "next", items: ["6 · App shell, 5 pages, dark mode", "7 · Streaming chat page"] },
+  { name: "Checkpoint C", status: "later", items: ["8 · Eval scaffold", "9 · Tests and docs"] },
+];
+
+const PHASES = [
+  { no: 1, name: "Foundation", what: "App shell, streaming chat, gateway, tracing, eval scaffold.", now: true },
+  { no: 2, name: "Core RAG", what: "Load the handbook and Acme docs, embeddings, pgvector, citation chips.", demo: "Demo 1" },
+  { no: 3, name: "Advanced RAG + evals", what: "Hybrid search, reranker, query rewriting, GraphRAG, evals in CI." },
+  { no: 4, name: "Agents + tools", what: "LangGraph agent, tools, approval cards, memory." },
+  { no: 5, name: "Multi-agent + MCP", what: "Planner, Researcher, Action and Verifier; Jira and Slack via MCP.", demo: "Demo 2" },
+  { no: 6, name: "Multimodal + voice", what: "Questions about images and scanned PDFs; speak and listen." },
+  { no: 7, name: "Production-ready", what: "Guardrails, caching, model routing, login, cost dashboard, deploy." },
+  { no: 8, name: "Fine-tune + launch", what: "Local Ollama, a small LoRA fine-tune, demo video, README.", demo: "Final demo" },
+];
+
+const STATUS_LABEL = { built: "Built", next: "Next", later: "Later" };
+const $ = (id) => document.getElementById(id);
+let current = -1;        // index into STEPS, -1 = nothing playing
+let selected = "chatapi";
+let timer = null;
+const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+function renderLayers() {
+  $("layers").innerHTML = LAYERS.map((layer) => {
+    const nodes = Object.entries(NODES).filter(([, n]) => n.layer === layer).map(([id, n]) =>
+      `<button type="button" class="node ${n.status}" data-id="${id}" id="node-${id}">
+         <span class="n-name">${n.name}</span><span class="n-file">${n.file}</span>
+       </button>`).join("");
+    return `<div class="layer"><div class="label">${layer}</div><div class="nodes">${nodes}</div></div>`;
+  }).join("");
+  document.querySelectorAll(".node").forEach((el) =>
+    el.addEventListener("click", () => { stop(); current = -1; selected = el.dataset.id; update(); }));
+}
+
+function escapeHtml(s) { return s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+
+function update() {
+  document.querySelectorAll(".node").forEach((el) => el.classList.remove("lit", "selected"));
+  const step = STEPS[current];
+  const id = step ? step.node : selected;
+  const node = NODES[id];
+  const el = $("node-" + id);
+  if (el) el.classList.add(step ? "lit" : "selected");
+  $("bar").style.width = step ? `${((current + 1) / STEPS.length) * 100}%` : "0";
+  $("btn-prev").disabled = current <= 0;
+  $("btn-next").disabled = current >= STEPS.length - 1;
+
+  const head = step
+    ? `<div class="step-no">Step ${current + 1} of ${STEPS.length}</div><h3>${step.title}</h3><p>${step.text}</p>`
+    : `<div class="step-no">${node.layer}</div><h3>${node.name}</h3><p>${node.what}</p>`;
+  const wire = step && step.wire ? `<div class="wire">${escapeHtml(step.wire)}</div>` : "";
+  $("panel").innerHTML = `${head}${wire}
+    <div class="file">${node.file}</div>
+    <div><span class="chip ${node.status}">${STATUS_LABEL[node.status]}</span></div>
+    <div class="concept">${node.concept}</div>`;
+}
+
+function go(i) { current = Math.max(0, Math.min(STEPS.length - 1, i)); update(); }
+function stop() { clearInterval(timer); timer = null; $("btn-play").textContent = current >= 0 && current < STEPS.length - 1 ? "Resume" : "Play request"; }
+function play() {
+  if (timer) { stop(); return; }
+  if (current >= STEPS.length - 1) current = -1;
+  go(current + 1);
+  $("btn-play").textContent = "Pause";
+  timer = setInterval(() => {
+    if (current >= STEPS.length - 1) { stop(); $("btn-play").textContent = "Replay"; return; }
+    go(current + 1);
+  }, reduceMotion ? 4200 : 3200);
+}
+
+$("btn-play").addEventListener("click", play);
+$("btn-next").addEventListener("click", () => { stop(); go(current + 1); });
+$("btn-prev").addEventListener("click", () => { stop(); go(current - 1); });
+
+$("checkpoints").innerHTML = CHECKPOINTS.map((c) =>
+  `<div class="cp ${c.status}"><h4>${c.name}<span class="chip ${c.status}">${STATUS_LABEL[c.status]}</span></h4>
+   <ul>${c.items.map((i) => `<li>${i}</li>`).join("")}</ul></div>`).join("");
+
+$("phases").innerHTML = PHASES.map((p) =>
+  `<div class="phase ${p.now ? "now" : ""}"><span class="ph-no">Phase ${p.no}${p.now ? " · you are here" : ""}</span>
+   <span class="ph-name">${p.name}</span><p>${p.what}</p>${p.demo ? `<span class="demo">${p.demo}</span>` : ""}</div>`).join("");
+
+renderLayers();
+update();
+</script>

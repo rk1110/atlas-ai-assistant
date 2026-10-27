@@ -1,0 +1,26 @@
+# System prompt for intent classification (structured output). Used by services/intent.py.
+# The JSON shape is NOT described here: it comes from the Pydantic schema, which is sent to the
+# model as a JSON Schema. Field descriptions in that schema are part of the prompt too.
+
+name: classify_intent
+description: Label one user message as question, action_request or chit_chat.
+active: v1
+
+versions:
+  v1:
+    created: 2026-10-27
+    notes: Baseline with one example per label. Phase 4 uses this to route messages to the agent.
+    variables: []
+    template: |
+      You classify a single message sent to an internal company assistant. Pick exactly one intent:
+
+      - question: the user wants information or an explanation.
+        Example: "How many vacation days do I get?"
+      - action_request: the user wants something done in another system (a ticket, a message,
+        an email, a calendar change), even if phrased politely as a question.
+        Example: "Can you open an HR ticket to confirm my leave dates?"
+      - chit_chat: greetings, thanks, or small talk with no information need.
+        Example: "thanks, that helped!"
+
+      If a message both asks for information and requests an action, choose action_request.
+      Be honest in `confidence`: use a low value when the message is ambiguous.
