@@ -5,10 +5,32 @@ description = "Atlas backend: FastAPI service with all AI logic"
 requires-python = "==3.13.*"
 # Exact pins only (CLAUDE.md). Rule: newest release that is >= 14 days old, unless a security fix needs newer.
 dependencies = [
+    "alembic==1.20.0",
+    "asyncpg==0.32.0",
     "fastapi==0.143.0",
+    "litellm==1.105.0",
+    "pgvector==0.5.1",
+    "pydantic==2.14.1",
+    "pydantic-settings==2.15.0",
+    "pyyaml==6.0.3",
+    "sqlalchemy[asyncio]==2.1.4",
     "uvicorn[standard]==0.54.0",
 ]
 
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+
+[tool.ruff.lint]
+# Explicit rule set, so upgrading ruff never silently changes what we enforce.
+# E/W pycodestyle, F pyflakes, I import order, B bugbear, UP pyupgrade,
+# BLE blind `except Exception`, ASYNC async pitfalls, RUF ruff-specific.
+select = ["E", "W", "F", "I", "B", "UP", "BLE", "ASYNC", "RUF"]
+
+[dependency-groups]
+dev = [
+    "httpx==0.28.1",
+    "pytest==9.1.1",
+    "pytest-asyncio==1.4.0",
+    "ruff==0.17.0",
+]

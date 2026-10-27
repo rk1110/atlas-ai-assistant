@@ -4,7 +4,7 @@ name: atlas
 
 # Shared Langfuse settings, reused by langfuse-web and langfuse-worker via a YAML anchor (&/<<: *).
 x-langfuse-env: &langfuse-env
-  DATABASE_URL: postgresql://${POSTGRES_USER:?}:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/langfuse
+  DATABASE_URL: postgresql://${POSTGRES_USER:?set in .env}:${POSTGRES_PASSWORD:?set in .env}@postgres:5432/langfuse
   NEXTAUTH_URL: http://localhost:3001
   SALT: ${LANGFUSE_SALT:?set in .env}
   ENCRYPTION_KEY: ${LANGFUSE_ENCRYPTION_KEY:?set in .env}
@@ -17,14 +17,14 @@ x-langfuse-env: &langfuse-env
   # Langfuse stores raw trace events and media in S3-compatible storage (MinIO here).
   LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
-  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?}
+  LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set in .env}
   LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set in .env}
   LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
   LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
   LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
   LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
   LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
-  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?}
+  LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:?set in .env}
   LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:?set in .env}
   LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://minio:9000
   LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
@@ -40,9 +40,9 @@ services:
     image: pgvector/pgvector:0.8.7-pg17-bookworm
     restart: unless-stopped
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:?}
+      POSTGRES_USER: ${POSTGRES_USER:?set in .env}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set in .env}
-      POSTGRES_DB: ${POSTGRES_DB:?}
+      POSTGRES_DB: ${POSTGRES_DB:?set in .env}
       TZ: UTC
     ports:
       - "127.0.0.1:5432:5432" # localhost only: lets you run pytest / psql from your Mac
@@ -102,7 +102,7 @@ services:
     # Create the "langfuse" bucket (a folder under /data) before starting the server.
     command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?}
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?set in .env}
       MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?set in .env}
     ports:
       - "127.0.0.1:9090:9000"
@@ -180,10 +180,10 @@ services:
       OLLAMA_API_KEY: ${OLLAMA_API_KEY:-}
       OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       DATABASE_URL: ${DATABASE_URL:?set in .env}
-      REDIS_URL: redis://:${REDIS_PASSWORD:?}@redis:6379/0
+      REDIS_URL: redis://:${REDIS_PASSWORD:?set in .env}@redis:6379/0
       LANGFUSE_HOST: ${LANGFUSE_HOST:-http://langfuse-web:3000}
-      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?}
-      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?}
+      LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?set in .env}
+      LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?set in .env}
     extra_hosts:
       - "host.docker.internal:host-gateway" # reach Ollama on your Mac (also needed on Linux)
     ports:

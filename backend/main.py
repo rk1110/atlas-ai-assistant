@@ -1,13 +1,16 @@
-"""FastAPI application entry point.
+"""FastAPI application entry point: creates the app and mounts the routers.
 
-Step 2 only exposes `/health` so Docker can tell the container is alive.
-Step 3 adds config, the database and routers.
+Routers live in `api/`; this file only wires them together, so adding a feature means adding
+a router file and one `include_router` line, never editing existing routes.
 """
 
 from fastapi import FastAPI
 from pydantic import BaseModel
 
+from api import models
+
 app = FastAPI(title="Atlas API", version="0.1.0")
+app.include_router(models.router)
 
 
 class HealthResponse(BaseModel):

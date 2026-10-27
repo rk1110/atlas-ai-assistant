@@ -36,3 +36,19 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 | Backend container gets an explicit env var list, not the whole `.env` | Least privilege: the backend doesn't need Langfuse's server secrets | `env_file: .env` (simpler, leaks every secret into the container) |
 | Dev containers bind-mount source + hot reload; frontend `node_modules` kept in an anonymous volume | Edit on your Mac, see changes instantly; Linux native binaries must not be overwritten by macOS ones | Rebuild image on each change (slow) |
 | Python **3.13** in the image (you have 3.14 locally) | AI libraries (tokenizers, torch for sentence-transformers) reliably ship wheels for 3.13 first | 3.14 (risk of missing wheels in Phase 2–3) |
+
+## 2026-10-27 · Phase 1 step 3a (config + LLM gateway)
+
+| Decision | Why | Alternatives considered |
+| --- | --- | --- |
+| Model catalog in `config/models.yaml` with **per-model `params`** (not global temperature/max_tokens) | Claude 5.5 models reject non-default `temperature` (400) while Ollama models accept it; the difference is data, not `if provider` branches | One global params block (breaks Claude); provider-specific code paths |
+| Claude chat uses `reasoning_effort: low` | Claude 5.5 always thinks; effort is the only control, and low keeps chat latency down. LiteLLM maps it to `output_config.effort` | Default effort (slower, pricier for chat) |
+| Server-side refusal fallback (`fallbacks: default` + beta header) on Sonnet 5.5, via `extra_body` / `extra_headers` | A wrongly-declined request is retried on a fallback model in the same call. **Not yet verified end to end**: no API credit (see below) | No fallback (a false refusal just fails) |
+| `LITELLM_LOCAL_MODEL_COST_MAP=True` | Use the price map bundled with the pinned LiteLLM instead of fetching from GitHub at import: reproducible, offline-safe, no runtime download | LiteLLM default (remote fetch on every start) |
+| Gateway yields provider-neutral `TextDelta` / `Completion`; errors become `LLMError(kind=...)` | Callers (chat service, evals) never depend on LiteLLM or provider exception types; the UI can react per kind | Let LiteLLM exceptions propagate |
+| `billing` error kind, detected from Anthropic's "credit balance is too low" message | Anthropic sends it as a generic 400; users need "add credit or switch model", not "bad request". String match is fragile, revisit if the wording changes | Treat as `bad_request` |
+| **Defaults switched to Ollama Cloud** (`gpt-oss:120b` chat, `gpt-oss:20b` cheap) | Smoke test: Anthropic account has no API credit (evaluation plan). Switch back in one line when billing is added | Block Phase 1 on billing |
+| Ollama Cloud cost shows $0 | LiteLLM prices all `ollama_chat/` models at $0/token (assumes local). Ollama Cloud bills by plan usage, so per-call $0 is accurate per token but not the full cost | Custom price entries (no published per-token price) |
+| Availability check: key present, or TCP probe for local servers | Lets the UI grey out models; a present key can still be rejected, which surfaces as a typed error at call time | Real test call per model (costs money, slow) |
+| Explicit ruff rule set (`E,W,F,I,B,UP,BLE,ASYNC,RUF`) | Upgrading ruff must not silently change what we enforce | Ruff defaults |
+| Accepted `filelock 3.32.7` CVEs (pip-audit) | LiteLLM pins `filelock<4`; 2 of 3 CVEs are Windows-only and the Linux one is in `ReadWriteLock`, which nothing in our tree uses. Re-audit on every LiteLLM bump | Force `filelock 4.x` past LiteLLM's declared range |
