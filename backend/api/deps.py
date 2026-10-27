@@ -9,8 +9,10 @@ from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.config import Settings, get_settings
+from core.db import get_session
 from core.llm import LLMGateway
 from core.model_catalog import ModelCatalog
 from core.prompts import PromptRegistry
@@ -36,3 +38,4 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 CatalogDep = Annotated[ModelCatalog, Depends(get_catalog)]
 GatewayDep = Annotated[LLMGateway, Depends(get_gateway)]
 PromptsDep = Annotated[PromptRegistry, Depends(get_prompts)]
+SessionDep = Annotated[AsyncSession, Depends(get_session)]

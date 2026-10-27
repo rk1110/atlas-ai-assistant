@@ -188,8 +188,10 @@ services:
       - "host.docker.internal:host-gateway" # reach Ollama on your Mac (also needed on Linux)
     ports:
       - "8000:8000"
-    # Dev mode: mount source code and auto-reload on save. The image's own copy is used in production.
-    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    # Dev mode: apply pending DB migrations, then serve with auto-reload on save.
+    # `exec` replaces the shell with uvicorn, so it receives Docker's stop signal directly.
+    # (Production runs migrations as a separate one-off step, so several replicas never race.)
+    command: ["sh", "-c", "alembic upgrade head && exec uvicorn main:app --host 0.0.0.0 --port 8000 --reload"]
     volumes:
       - ./backend:/app/backend
       - ./prompts:/app/prompts
