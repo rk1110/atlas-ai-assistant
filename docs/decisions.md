@@ -6,7 +6,7 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 
 | Decision | Why | Alternatives considered |
 | --- | --- | --- |
-| Langfuse **v3** self-hosted (web + worker + ClickHouse + MinIO), reusing our Postgres (separate `langfuse` DB) and Redis | v3 is the supported version; v2 is legacy. ClickHouse is Langfuse's internal analytics store, not app data, so "one database for app data" still holds | Langfuse v2 (single container, but legacy); Langfuse Cloud (no infra, but data leaves the machine) |
+| Langfuse self-hosted (v3 planned; **superseded: v4**, see step 2 below) (web + worker + ClickHouse + MinIO), reusing our Postgres (separate `langfuse` DB) and Redis | v3 is the supported version; v2 is legacy. ClickHouse is Langfuse's internal analytics store, not app data, so "one database for app data" still holds | Langfuse v2 (single container, but legacy); Langfuse Cloud (no infra, but data leaves the machine) |
 | SSE written by hand with FastAPI `StreamingResponse` | ~10 lines; makes the wire format visible for learning | `sse-starlette` library |
 | Custom `useChatStream` hook instead of Vercel AI SDK `useChat` | `useChat` expects the AI SDK stream protocol; our `StreamEvent` contract must be the single source of truth (principle 4) | `useChat` with the backend emitting AI SDK protocol; AI SDK custom transport |
 | Client generates conversation UUIDs | No extra "conversation created" event needed; event contract stays at 7 types | Server creates id and returns it in `done` or a header |
@@ -21,3 +21,18 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
   `import mcp` would load our folder and break the SDK in Phase 5.
 - **Alternatives:** wrap all backend code in an `atlas/` package (bigger change to the layout in the plan);
   keep `mcp/` and rely on import tricks (fragile).
+
+## 2026-10-22 · Phase 1 step 2 (infrastructure)
+
+| Decision | Why | Alternatives considered |
+| --- | --- | --- |
+| **Langfuse v4** (`4.55.0`) instead of v3 | v4 is the current release and the official compose file now uses it; same components (web, worker, ClickHouse, MinIO, Redis, Postgres) | v3 (older, would need upgrading soon) |
+| Version pin rule: **newest release ≥ 14 days old** | Brand-new releases sometimes ship regressions; two weeks lets early bugs surface | Always latest (risky); a fixed old version (misses fixes) |
+| Exception: **Next.js 16.4.2** (newer than 14 days) | 16.0.0–16.4.0 has an unauthenticated RCE (GHSA-2464-fhr4-w9xw); security fixes beat the age rule | Stay on 16.4.0 (vulnerable) |
+| Ignored dev-only `npm audit` "high" (`braces` via eslint-config-next) | Only affects the local linter, never shipped; the suggested "fix" downgrades to Next 14 | Downgrade eslint-config-next (breaks Next 16 lint rules) |
+| MinIO from `cgr.dev/chainguard/minio`, pinned by digest | MinIO stopped publishing community Docker images; Chainguard only publishes `latest`, so a digest is the only exact pin | `minio/minio` (no longer maintained); Langfuse's unpinned `latest` |
+| One Redis shared by Langfuse and Atlas with `noeviction` | Langfuse's job queue must not lose keys; Atlas cache keys will use TTLs instead of eviction | Separate Redis per app (more containers; revisit in Phase 7 if the cache grows) |
+| pgvector extension enabled by Alembic migration, not `init.sql` | Migrations run everywhere (incl. cloud Postgres); init scripts only run on a fresh local volume | Enable in `init.sql` |
+| Backend container gets an explicit env var list, not the whole `.env` | Least privilege: the backend doesn't need Langfuse's server secrets | `env_file: .env` (simpler, leaks every secret into the container) |
+| Dev containers bind-mount source + hot reload; frontend `node_modules` kept in an anonymous volume | Edit on your Mac, see changes instantly; Linux native binaries must not be overwritten by macOS ones | Rebuild image on each change (slow) |
+| Python **3.13** in the image (you have 3.14 locally) | AI libraries (tokenizers, torch for sentence-transformers) reliably ship wheels for 3.13 first | 3.14 (risk of missing wheels in Phase 2–3) |
