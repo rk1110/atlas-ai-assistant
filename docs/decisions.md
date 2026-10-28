@@ -159,3 +159,20 @@ Important choices, newest at the bottom. Format: date · decision · why · alte
 | One event loop per test session (pytest-asyncio config) | The cached async engine's pooled connections are bound to the loop that created them | Per-test loops + engine per test |
 | `FakeGateway` via `app.dependency_overrides` | Fast (1.3 s for 39 tests), free, deterministic; asserts on exactly what the model was sent | Mock LiteLLM HTTP calls (brittle) |
 | Cross-language drift tests: Python `LLMErrorKind` ⊆ `ErrorCode`, and TS `lib/events.ts` event types + error codes == Python | The contract lives in three places; a test now fails on mismatch (verified by deliberately breaking it) | Code generation from JSON Schema (heavier; revisit if the contract grows) |
+
+## 2026-10-28 · Chat model choice: GPT-OSS 120B vs 20B (Phase 1 exercise 1)
+
+Golden set v1, 20 questions, `chat_system@v1`, one run each on Ollama Cloud:
+
+| Model | Avg latency | Output tokens | Errors | Acme refusals | Notable answer |
+| --- | --- | --- | --- | --- | --- |
+| `gpt-oss-cloud` (120B) | **1,577 ms** | 5,029 | 0 | 8 / 10 | MVC → "Minimum Viable Change" (close; handbook says Minimal *Valuable* Change) |
+| `gpt-oss-20b-cloud` (20B) | 2,533 ms | 4,408 | 0 | 8 / 10 | MVC → asked if it meant Model-View-Controller (wrong) |
+
+Reports: `backend/evals/results/20261028-045212_b7fb4019.json` (120B), `20261028-045400_004f893f.json` (20B).
+
+- **Decision:** keep **120B** as the default chat model. It was faster in this run and gave the better answer on the one question where quality visibly differed.
+- **Why the bigger model can be faster:** both are mixture-of-experts models that use only a few billion parameters per token, so size barely affects speed; provider load and how long each model "thinks" dominate. Input tokens were identical (4,061), so the difference is entirely model-side.
+- **Caveats:** one run per model is a small sample (cloud latency varies run to run; 2–3 runs each would be fairer). Correctness isn't scored yet: "better answer" is a manual reading of a few answers. Phase 3's LLM-as-judge replaces that with a score.
+- **Alternatives:** 20B as the default for cost (no per-token price on Ollama Cloud, so no saving today); Claude Sonnet 5.5 once the account has credit (re-run this comparison then).
+- **Keep 20B as the cheap model** for classification, where both are fast enough and the task is simpler.

@@ -54,3 +54,122 @@ questions:
     expected_answer: Up to $75 per person; anything above that needs manager approval first.
     expected_sources: ["acme-docs:finance/expense-policy.md"]
     tags: [acme, finance, policy]
+
+
+  - id: gitlab-business-model
+    question: What business model does GitLab use?
+    expected_answer: >
+      Open core: a free, open-source core (the Community Edition) plus paid tiers that add
+      features on top.
+    expected_sources: ["gitlab-handbook:/handbook/company/stewardship/"]
+    tags: [gitlab, company]
+
+  - id: gitlab-handbook-first
+    question: What does "handbook first" mean at GitLab?
+    expected_answer: >
+      Document things in the handbook first, then share a link to the handbook page instead of
+      explaining in chat or meetings, so the handbook stays the single source of truth.
+    expected_sources: ["gitlab-handbook:/handbook/about/handbook-usage/"]
+    tags: [gitlab, communication]
+
+  - id: gitlab-public-handbook
+    question: Is GitLab's handbook private or public?
+    expected_answer: >
+      Public: the handbook is published openly on the internet, as part of GitLab's
+      transparency value (only a small set of sensitive topics is kept internal).
+    expected_sources: ["gitlab-handbook:/handbook/about/"]
+    tags: [gitlab, culture]
+
+  - id: gitlab-async
+    question: Does GitLab prefer meetings or asynchronous communication?
+    expected_answer: >
+      Asynchronous communication: work is done in writing (issues, merge requests, the
+      handbook) by default, and meetings are used only when synchronous discussion is needed.
+    expected_sources: ["gitlab-handbook:/handbook/company/culture/all-remote/asynchronous/"]
+    tags: [gitlab, communication]
+
+  - id: gitlab-boring-solutions
+    question: What does GitLab mean by "boring solutions"?
+    expected_answer: >
+      Prefer the simplest, most conventional solution that works over a clever or complex
+      one; it is part of the Efficiency value.
+    expected_sources: ["gitlab-handbook:/handbook/values/"]
+    tags: [gitlab, culture]
+
+  - id: gitlab-coffee-chats
+    question: What are coffee chats at GitLab?
+    expected_answer: >
+      Informal video calls between team members, not about work tasks, to build relationships
+      in an all-remote company.
+    expected_sources: ["gitlab-handbook:/handbook/company/culture/all-remote/informal-communication/"]
+    tags: [gitlab, culture]
+
+  - id: gitlab-mvc
+    question: What is an MVC at GitLab?
+    expected_answer: >
+      A Minimal Valuable Change: the smallest change that still adds value, shipped quickly
+      to get feedback. It is how GitLab practises the Iteration value.
+    expected_sources: ["gitlab-handbook:/handbook/values/"]
+    tags: [gitlab, culture]
+
+  - id: acme-working-hours
+    question: How much hours I need to work daily?
+    expected_answer: >
+      8 hours a day (40 hours a week), with core hours from 10:00 to 16:00; the 1-hour lunch
+      break is not counted as working time.
+    expected_sources: ["acme-docs:hr/working-hours-policy.md"]
+    tags: [acme, hr, policy]
+
+  - id: acme-vacation-days
+    question: How many vacation days do new employees get at Acme?
+    expected_answer: >
+      22 paid vacation days per year, accrued monthly, in addition to public holidays; up to
+      5 unused days can be carried over to the next year.
+    expected_sources: ["acme-docs:hr/time-off-policy.md"]
+    tags: [acme, hr, policy]
+
+  - id: acme-sick-leave
+    question: How many paid sick days do I get, and when do I need a doctor's note?
+    expected_answer: >
+      10 paid sick days per year; a doctor's note is required after 3 consecutive sick days.
+    expected_sources: ["acme-docs:hr/time-off-policy.md"]
+    tags: [acme, hr, policy]
+
+  - id: acme-remote-work
+    question: Can I work from home at Acme?
+    expected_answer: >
+      Yes, Acme is hybrid: up to 3 days a week from home, with Tuesday and Thursday as
+      in-office days for everyone.
+    expected_sources: ["acme-docs:hr/hybrid-work-policy.md"]
+    tags: [acme, hr, policy]
+
+  - id: acme-learning-budget
+    question: Is there a budget for courses or conferences?
+    expected_answer: >
+      Yes: $1,500 per employee per year for courses, books and conferences, approved by your
+      manager before you spend it.
+    expected_sources: ["acme-docs:hr/learning-and-development.md"]
+    tags: [acme, hr, benefits]
+
+  - id: acme-laptop-replacement
+    question: How often does Acme replace laptops, and how do I request a new one?
+    expected_answer: >
+      Every 3 years; request a replacement by opening a ticket in the IT service portal.
+    expected_sources: ["acme-docs:it/hardware-policy.md"]
+    tags: [acme, it, policy]
+
+  - id: acme-phishing-report
+    question: I clicked a link in a suspicious email. What should I do?
+    expected_answer: >
+      Report it to the Security team within 1 hour, in the #security-incidents Slack channel
+      or at security@acme.example, and don't delete the email so it can be investigated.
+    expected_sources: ["acme-docs:security/incident-reporting.md"]
+    tags: [acme, security, policy]
+
+  - id: acme-expense-reimbursement
+    question: How do I get reimbursed for a work expense?
+    expected_answer: >
+      Submit the receipt in the expense tool within 30 days of the purchase; approved
+      expenses are paid with the next monthly payroll.
+    expected_sources: ["acme-docs:finance/expense-policy.md"]
+    tags: [acme, finance, policy]
