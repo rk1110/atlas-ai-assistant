@@ -94,7 +94,7 @@ cd frontend && npm run dev                                  # frontend outside D
 
 | Phase | Name | Status |
 | --- | --- | --- |
-| 1 | Foundation (app shell, streaming chat, gateway, tracing, eval scaffold) | In progress: all 9 build steps done; walkthrough, exercises, quiz pending |
+| 1 | Foundation (app shell, streaming chat, gateway, tracing, eval scaffold) | Done (2026-10-29; exercise 3 solved by Claude at my request) |
 | 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | Not started |
 | 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Not started |
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Not started |

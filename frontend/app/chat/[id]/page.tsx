@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { connection } from "next/server";
 
 import { ChatView } from "@/components/chat/chat-view";
 import { api, ApiError } from "@/lib/api";
@@ -10,6 +11,9 @@ import { toChatMessage } from "@/lib/messages";
  */
 export default async function ConversationPage({ params }: PageProps<"/chat/[id]">) {
   const { id } = await params; // Next.js 16: params is a Promise
+  // A conversation is per-request data: render it at request time, never prerender it.
+  // (Without this, Next.js flags the fetches below as unstable values during prerender.)
+  await connection();
   const data = await load(id);
   if (data === null) notFound();
   const title = data.conversations.find((c) => c.id === id)?.title ?? "Conversation";

@@ -37,7 +37,7 @@ interface Options {
   getConversationId: () => string;
   initialMessages: ChatMessage[];
   /** Called once per finished turn (done, error or stop), e.g. to refresh the sidebar. */
-  onTurnEnd?: () => void;
+  onTurnEnd?: (outcome: { failed: boolean }) => void;
 }
 
 export function useChatStream({ getConversationId, initialMessages, onTurnEnd }: Options) {
@@ -50,18 +50,24 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
   }, []);
 
   const send = useCallback(
-    async (text: string, modelId: string | null) => {
-      const userId = crypto.randomUUID();
+    async (text: string, modelId: string | null, { retry = false }: { retry?: boolean } = {}) => {
       // Temporary id until the `done` event tells us the id the backend saved it under.
       let assistantId = crypto.randomUUID();
-      setMessages((prev) => [
-        ...prev,
-        { ...blank(userId, "user", modelId), content: text, status: "done" },
-        blank(assistantId, "assistant", modelId),
-      ]);
+      setMessages((prev) =>
+        retry
+          ? // Try again: the question is already on screen (and saved). Swap the failed answer
+            // for a fresh one instead of adding the question a second time.
+            [...prev.filter((m) => !(m === prev.at(-1) && m.status === "error")), blank(assistantId, "assistant", modelId)]
+          : [
+              ...prev,
+              { ...blank(crypto.randomUUID(), "user", modelId), content: text, status: "done" },
+              blank(assistantId, "assistant", modelId),
+            ],
+      );
       setIsStreaming(true);
       const controller = new AbortController();
       abortRef.current = controller;
+      let failed = false;
 
       const handle = (event: StreamEvent) => {
         switch (event.type) {
@@ -69,6 +75,7 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
             updateMessage(assistantId, (m) => ({ ...m, content: m.content + event.text }));
             break;
           case "error":
+            failed = true;
             updateMessage(assistantId, (m) => ({ ...m, status: "error", error: event }));
             break;
           case "done": {
@@ -95,7 +102,7 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
         const response = await fetch(`${BROWSER_API_URL}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversation_id: getConversationId(), message: text, model_id: modelId }),
+          body: JSON.stringify({ conversation_id: getConversationId(), message: text, model_id: modelId, retry }),
           signal: controller.signal,
         });
         if (!response.ok || !response.body) {
@@ -121,7 +128,7 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
         updateMessage(assistantId, (m) => (m.status === "streaming" ? { ...m, status: "done" } : m));
         setIsStreaming(false);
         abortRef.current = null;
-        onTurnEnd?.();
+        onTurnEnd?.({ failed });
       }
     },
     [getConversationId, onTurnEnd, updateMessage],

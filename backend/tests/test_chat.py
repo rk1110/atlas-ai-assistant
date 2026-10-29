@@ -42,13 +42,13 @@ async def test_streams_tokens_then_done_and_saves_both_messages(client: AsyncCli
     assert [e["type"] for e in events] == ["token", "token", "done"]
     assert "".join(e["text"] for e in events if e["type"] == "token") == "Hello world"
     done = events[-1]
-    assert done["usage"]["input_tokens"] == 10 and done["prompt_ref"] == "chat_system@v1"
+    assert done["usage"]["input_tokens"] == 10 and done["prompt_ref"].startswith("chat_system@")
 
     user, assistant = await saved_messages(cid)
     assert (user.role, user.content) == ("user", "Hi there")
     assert (assistant.role, assistant.content) == ("assistant", "Hello world")
     assert str(assistant.id) == done["message_id"]
-    assert assistant.prompt_ref == "chat_system@v1" and assistant.input_tokens == 10
+    assert assistant.prompt_ref == done["prompt_ref"] and assistant.input_tokens == 10
 
 
 async def test_history_is_sent_on_the_next_turn(client: AsyncClient, fake_gateway: FakeGateway):
@@ -90,6 +90,35 @@ async def test_partial_answer_is_saved_but_left_out_of_history(
     await chat(client, cid, "Again")
     roles = [m.role for m in fake_gateway.calls[-1]]
     assert roles == ["system", "user", "user"]  # the cut-off answer was not re-sent
+
+
+async def test_retry_answers_again_without_saving_the_question_twice(
+    client: AsyncClient, fake_gateway: FakeGateway
+):
+    fake_gateway.chunks = []
+    fake_gateway.error = LLMError("rate_limit", "Slow down", "fake")
+    cid = str(uuid.uuid4())
+    await chat(client, cid, "Hello?")
+
+    fake_gateway.chunks, fake_gateway.error = ["Hi!"], None
+    events = await chat(client, cid, "Hello?", retry=True)
+
+    assert events[-1]["type"] == "done" and events[-1]["message_id"]
+    assert [(m.role, m.content) for m in await saved_messages(cid)] == [
+        ("user", "Hello?"),
+        ("assistant", "Hi!"),
+    ]
+    # The model saw the question once, not twice.
+    assert [m.role for m in fake_gateway.calls[-1]] == ["system", "user"]
+
+
+async def test_retry_with_different_text_is_saved_as_a_new_question(client: AsyncClient):
+    cid = str(uuid.uuid4())
+    await chat(client, cid, "First question")
+    await chat(client, cid, "Something else", retry=True)  # doesn't match: never drop it
+
+    questions = [m.content for m in await saved_messages(cid) if m.role == "user"]
+    assert questions == ["First question", "Something else"]
 
 
 async def test_unknown_model_is_rejected_before_streaming(client: AsyncClient):

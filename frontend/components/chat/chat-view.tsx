@@ -32,16 +32,22 @@ export function ChatView({ conversationId, title, initialMessages }: Props) {
   const [modelId, setModelId] = useState<string | null>(null);
   const isNew = conversationId === null;
 
-  const onTurnEnd = useCallback(() => {
-    notifyConversationsChanged();
-    // A brand-new chat gets its own URL after the first answer, so reload/bookmark works.
-    if (isNew && idRef.current) router.replace(`/chat/${idRef.current}`);
-  }, [isNew, router]);
+  const onTurnEnd = useCallback(
+    ({ failed }: { failed: boolean }) => {
+      notifyConversationsChanged();
+      // A brand-new chat gets its own URL after the first answer, so reload/bookmark works.
+      // Not after an error: the move remounts this view, and an error that produced no text
+      // isn't saved, so the banner (and its hint or Try again) would vanish. The next
+      // successful answer moves it instead.
+      if (isNew && idRef.current && !failed) router.replace(`/chat/${idRef.current}`);
+    },
+    [isNew, router],
+  );
 
   const { messages, isStreaming, send, stop } = useChatStream({ getConversationId, initialMessages, onTurnEnd });
 
   const lastQuestion = messages.findLast((m) => m.role === "user")?.content;
-  const retry = () => lastQuestion && send(lastQuestion, modelId);
+  const retry = () => lastQuestion && send(lastQuestion, modelId, { retry: true });
 
   return (
     <MotionConfig reducedMotion="user">

@@ -45,8 +45,9 @@ export function ModelSwitcher({ value, onChange, disabled }: Props) {
     }
   }
 
+  // "" (not undefined) while loading: the Select stays controlled and shows the placeholder.
   return (
-    <Select value={value ?? undefined} onValueChange={select} disabled={disabled || models.length === 0}>
+    <Select value={value ?? ""} onValueChange={select} disabled={disabled || models.length === 0}>
       <SelectTrigger size="sm" className="w-[270px] max-w-[55vw]" aria-label="Model">
         <SelectValue placeholder="Loading models…" />
       </SelectTrigger>
