@@ -51,7 +51,7 @@ export function ModelSwitcher({ value, onChange, disabled }: Props) {
       <SelectTrigger size="sm" className="w-[270px] max-w-[55vw]" aria-label="Model">
         <SelectValue placeholder="Loading models…" />
       </SelectTrigger>
-      <SelectContent align="end">
+      <SelectContent position="popper" align="end">
         {models.map((m) => (
           <SelectItem key={m.id} value={m.id} disabled={!m.available}>
             <span className="flex flex-col">

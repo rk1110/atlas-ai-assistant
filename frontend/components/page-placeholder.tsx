@@ -26,7 +26,7 @@ export function PagePlaceholder({ icon: Icon, phase, title, summary, features }:
       </div>
       <ul className="grid gap-3 sm:grid-cols-2">
         {features.map((feature) => (
-          <li key={feature} className="rounded-lg border bg-card p-4 text-sm">
+          <li key={feature} className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
             {feature}
           </li>
         ))}

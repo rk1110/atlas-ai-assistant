@@ -68,7 +68,7 @@ async function ModelList() {
             <span className="text-xs text-muted-foreground">{m.provider}</span>
           </span>
           <span className={m.available ? "text-primary" : "text-muted-foreground"}>
-            {m.available ? "Available" : m.unavailable_reason}
+            {m.available ? "Configured" : m.unavailable_reason}
           </span>
         </li>
       ))}
