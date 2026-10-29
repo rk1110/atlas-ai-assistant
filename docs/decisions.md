@@ -176,3 +176,21 @@ Reports: `backend/evals/results/20261028-045212_b7fb4019.json` (120B), `20261028
 - **Caveats:** one run per model is a small sample (cloud latency varies run to run; 2–3 runs each would be fairer). Correctness isn't scored yet: "better answer" is a manual reading of a few answers. Phase 3's LLM-as-judge replaces that with a score.
 - **Alternatives:** 20B as the default for cost (no per-token price on Ollama Cloud, so no saving today); Claude Sonnet 5.5 once the account has credit (re-run this comparison then).
 - **Keep 20B as the cheap model** for classification, where both are fast enough and the task is simpler.
+
+## 2026-10-29 · Chat prompt v2: length cap + follow-up question (Phase 1 exercise 2)
+
+`chat_system@v2` adds one rule to v1: "Keep answers under 120 words and end with one suggested follow-up question." Golden set v1, 20 questions, `gpt-oss-cloud` (120B), one run each:
+
+| Prompt | Avg latency | Input tokens | Output tokens | Errors | Follow-up question | Over 120 words |
+| --- | --- | --- | --- | --- | --- | --- |
+| `chat_system@v1` | 1,577 ms | 4,061 | 5,029 | 0 | — | — |
+| `chat_system@v2` | 1,588 ms | 4,381 (+8%) | **4,295 (−15%)** | 0 | **20 / 20** | 5 / 20 (longest 151) |
+
+Reports: `20261028-045212_b7fb4019.json` (v1), `20261029-132505_ee5684e0.json` (v2).
+
+- **Decision:** keep **v2** active. Answers are shorter and every one invites a next step, at no latency cost.
+- **Prompt rules are soft:** the 120-word cap was broken 5 times. A hard limit needs `max_tokens` or a post-generation check; the prompt only nudges.
+- **Shorter answers weren't faster:** latency is dominated by time to first token and the model's hidden reasoning, not the length of the visible answer.
+- **Every prompt line is paid on every call:** +16 input tokens per question here; small, but it scales with traffic and history.
+- **Caveats:** one run each; answer quality not scored yet (Phase 3 LLM-as-judge). The UI small print doesn't show the prompt version; it is in the `done` event, the database and Langfuse.
+- **Alternatives:** stay on v1 (longer, more complete answers); enforce length with `max_tokens` (can cut answers mid-sentence).
