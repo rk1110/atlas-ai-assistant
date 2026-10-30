@@ -59,17 +59,20 @@ export interface DoneEvent {
   trace_url: string | null;
 }
 
-// ------------------------------------------------------------------ Phase 2+: defined now, used later
+// ------------------------------------------------------------------ Phase 2: citations
 
 export interface CitationEvent {
   type: "citation";
   citation_id: string;
   document_id: string;
   title: string;
+  heading: string | null; // e.g. "Values > Iteration"
   url: string | null;
   snippet: string;
   score: number | null;
 }
+
+// ------------------------------------------------------------------ Phase 4+: defined now, used later
 
 export type StepStatus = "started" | "completed" | "failed";
 

@@ -1,14 +1,14 @@
 "use client";
 
 import { motion } from "motion/react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
+import { AnswerMarkdown } from "@/components/chat/answer-markdown";
+import { CitationList } from "@/components/chat/citation-list";
 import { ErrorBanner } from "@/components/chat/error-banner";
 import { MessageMeta } from "@/components/chat/message-meta";
 import type { ChatMessage } from "@/lib/use-chat-stream";
 
-/** One message. User text is shown as typed; assistant text is rendered as Markdown. */
+/** One message. User text is shown as typed; assistant text is Markdown with source chips. */
 export function MessageBubble({ message, onRetry }: { message: ChatMessage; onRetry?: () => void }) {
   // Only new messages fade in. History must be visible in the server-rendered HTML, before
   // JavaScript loads; `initial={false}` renders it at its final state.
@@ -29,12 +29,9 @@ export function MessageBubble({ message, onRetry }: { message: ChatMessage; onRe
       {waiting ? (
         <ThinkingDots />
       ) : (
-        message.content && (
-          <div className="markdown">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
-          </div>
-        )
+        message.content && <AnswerMarkdown content={message.content} citations={message.citations} />
       )}
+      <CitationList citations={message.citations} />
       {message.status === "stopped" && <p className="text-xs text-muted-foreground">Stopped.</p>}
       {message.error && <ErrorBanner error={message.error} onRetry={onRetry} />}
       {message.status !== "streaming" && <MessageMeta usage={message.usage} traceUrl={message.traceUrl} />}

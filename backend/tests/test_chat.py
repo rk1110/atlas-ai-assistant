@@ -9,7 +9,7 @@ from sqlalchemy import select
 from core.db import get_session_factory
 from core.llm import LLMError
 from models import Message
-from tests.conftest import FakeGateway
+from tests.conftest import FakeGateway, FakeRetriever
 
 
 def sse_events(body: str) -> list[dict]:
@@ -149,3 +149,41 @@ async def test_conversation_endpoints_list_open_and_delete(client: AsyncClient):
     assert (await client.delete(f"/api/conversations/{cid}")).status_code == 204
     assert (await client.get(f"/api/conversations/{cid}/messages")).status_code == 404
     assert await saved_messages(cid) == []  # messages went with it (ON DELETE CASCADE)
+
+
+async def test_retrieved_sources_are_numbered_in_the_system_prompt(
+    client: AsyncClient, fake_gateway: FakeGateway, fake_retriever: FakeRetriever
+):
+    await chat(client, str(uuid.uuid4()), "How many vacation days?")
+
+    assert fake_retriever.queries == ["How many vacation days?"]
+    system = fake_gateway.calls[0][0]
+    assert system.role == "system"
+    assert "[1] Doc 1 > Policy\nEmployees get 22 vacation days per year." in system.content
+    assert "covered up to $60 per day" in system.content  # a "$" in a source survives
+
+
+async def test_cited_sources_become_citation_events_before_done_and_are_saved(
+    client: AsyncClient, fake_gateway: FakeGateway
+):
+    fake_gateway.chunks = ["You get 22 days [1].", " Not [7]."]  # [7] doesn't exist
+    cid = str(uuid.uuid4())
+    events = await chat(client, cid, "How many vacation days?")
+
+    assert [e["type"] for e in events] == ["token", "token", "citation", "done"]
+    citation = events[2]
+    assert citation["citation_id"] == "1" and citation["document_id"] == "acme-docs:doc-1.md"
+    assert citation["snippet"] == "Employees get 22 vacation days per year."
+
+    response = await client.get(f"/api/conversations/{cid}/messages")
+    _, assistant = response.json()
+    assert assistant["citations"] == [citation]  # reopening the chat shows the same chips
+
+
+async def test_answer_without_markers_has_no_citations(client: AsyncClient):
+    cid = str(uuid.uuid4())
+    events = await chat(client, cid, "Hi there")  # the fake answers "Hello world"
+
+    assert "citation" not in [e["type"] for e in events]
+    response = await client.get(f"/api/conversations/{cid}/messages")
+    assert response.json()[1]["citations"] == []

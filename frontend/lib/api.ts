@@ -1,3 +1,5 @@
+import type { CitationEvent } from "@/lib/events";
+
 /**
  * Typed client for the Atlas backend's JSON endpoints (everything except the chat stream,
  * which lives in use-chat-stream.ts). Response types mirror the backend's Pydantic models.
@@ -38,6 +40,7 @@ export interface StoredMessage {
   output_tokens: number | null;
   latency_ms: number | null;
   trace_url: string | null;
+  citations: CitationEvent[];
 }
 
 export class ApiError extends Error {

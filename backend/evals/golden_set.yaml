@@ -44,7 +44,10 @@ questions:
     expected_answer: >
       GitLab is an all-remote company: there are no company offices, and team members work
       from their own locations around the world.
-    expected_sources: ["gitlab-handbook:/handbook/company/culture/all-remote/"]
+    # terminology/ added 2026-10-30: it states "no company-owned offices anywhere" outright.
+    expected_sources:
+      - "gitlab-handbook:/handbook/company/culture/all-remote/"
+      - "gitlab-handbook:/handbook/company/culture/all-remote/terminology/"
     tags: [gitlab, culture]
 
   - id: acme-parental-leave

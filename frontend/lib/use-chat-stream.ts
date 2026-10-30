@@ -15,7 +15,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { BROWSER_API_URL } from "@/lib/api";
-import { type ErrorEvent, parseStreamEvent, type StreamEvent, type Usage } from "@/lib/events";
+import { type CitationEvent, type ErrorEvent, parseStreamEvent, type StreamEvent, type Usage } from "@/lib/events";
 
 export type MessageStatus = "streaming" | "done" | "error" | "stopped";
 
@@ -25,6 +25,8 @@ export interface ChatMessage {
   content: string;
   status: MessageStatus;
   error: ErrorEvent | null;
+  /** Sources the answer cited; they arrive after the last token. */
+  citations: CitationEvent[];
   usage: Usage | null;
   traceUrl: string | null;
   modelId: string | null;
@@ -91,10 +93,12 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
             break;
           }
           case "citation":
+            updateMessage(assistantId, (m) => ({ ...m, citations: [...m.citations, event] }));
+            break;
           case "agent_step":
           case "tool_call":
           case "approval_request":
-            break; // Phase 2+ events: the UI for these arrives with those phases.
+            break; // Phase 4+ events: the UI for these arrives with those phases.
         }
       };
 
@@ -165,7 +169,18 @@ async function readEvents(body: ReadableStream<Uint8Array>, onEvent: (e: StreamE
 }
 
 function blank(id: string, role: ChatMessage["role"], modelId: string | null): ChatMessage {
-  return { id, role, content: "", status: "streaming", error: null, usage: null, traceUrl: null, modelId, live: true };
+  return {
+    id,
+    role,
+    content: "",
+    status: "streaming",
+    error: null,
+    citations: [],
+    usage: null,
+    traceUrl: null,
+    modelId,
+    live: true,
+  };
 }
 
 function httpError(status: number, body: string): ErrorEvent {

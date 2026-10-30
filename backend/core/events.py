@@ -68,7 +68,7 @@ class DoneEvent(BaseModel):
     trace_url: str | None = None  # ready-made link to that trace in the Langfuse UI
 
 
-# ---------------------------------------------------------------- Phase 2+: defined now, used later
+# ---------------------------------------------------------------- Phase 2: citations
 
 
 class CitationEvent(BaseModel):
@@ -78,10 +78,13 @@ class CitationEvent(BaseModel):
     citation_id: str  # referenced in the answer text, e.g. "[1]"
     document_id: str
     title: str
+    heading: str | None = None  # where in the document, e.g. "Values > Iteration" (Phase 2)
     url: str | None = None
     snippet: str  # the exact passage that supports the answer
     score: float | None = None  # retrieval relevance score (shown in debug views)
 
+
+# ---------------------------------------------------------------- Phase 4+: defined now, used later
 
 StepStatus = Literal["started", "completed", "failed"]
 

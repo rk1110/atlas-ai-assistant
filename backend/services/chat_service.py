@@ -3,13 +3,15 @@
 This is plain Python with no FastAPI or HTTP in it, so the route stays thin and the eval
 runner (step 8) can call exactly the same code the UI uses.
 
-Flow of `stream_reply`:
+Flow of `stream_reply` (RAG = steps 2-3: Retrieval-Augmented Generation):
     1. get or create the conversation, save the user's message (committed before any LLM call,
        so the question survives even if the model fails; a retry reuses the saved one)
-    2. load recent history, render the versioned system prompt
-    3. stream from the LLM gateway: each text delta becomes a TokenEvent
-    4. save the assistant message with provenance (model, prompt, tokens, cost, latency)
-    5. finish with DoneEvent, which is ALWAYS the last event, even after an error
+    2. retrieve the most relevant chunks for the question from the knowledge base
+    3. render the versioned system prompt with those chunks as numbered sources, load history
+    4. stream from the LLM gateway: each text delta becomes a TokenEvent
+    5. turn the answer's [n] markers into CitationEvents (only sources it actually cited)
+    6. save the assistant message with provenance (model, prompt, tokens, cost, citations)
+    7. finish with DoneEvent, which is ALWAYS the last event, even after an error
 
 If the client disconnects mid-answer (Stop button, closed tab), the partial answer is saved
 with error_code="cancelled" before the cancellation is allowed to continue.
@@ -31,16 +33,19 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from core.config import Settings
 from core.events import (
     RETRYABLE_CODES,
+    CitationEvent,
     DoneEvent,
     ErrorEvent,
     StreamEvent,
     TokenEvent,
     Usage,
 )
+from core.interfaces.retriever import Chunk, Retriever
 from core.llm import ChatMessage, Completion, LLMError, LLMGateway, TextDelta
 from core.prompts import PromptRegistry, RenderedPrompt
 from core.tracing import Span, Tracer
 from models import Conversation, Message
+from services.grounding import citations_for, format_sources
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +71,8 @@ class AnswerResult(BaseModel):
     completion: Completion | None
     prompt_ref: str
     trace_id: str | None
+    chunks: list[Chunk] = Field(default_factory=list)  # what retrieval found, best first
+    citations: list[CitationEvent] = Field(default_factory=list)  # what the answer cited
 
 
 class ChatService:
@@ -76,8 +83,12 @@ class ChatService:
         settings: Settings,
         session_factory: async_sessionmaker[AsyncSession],
         tracer: Tracer,
+        retriever: Retriever,
+        top_k: int,
     ):
         self._gateway = gateway
+        self._retriever = retriever
+        self._top_k = top_k
         self._prompts = prompts
         self._settings = settings
         self._session_factory = session_factory
@@ -129,7 +140,10 @@ class ChatService:
             await session.commit()
             history = await self._load_history(session, conversation.id)
 
-        prompt = self._render_system_prompt()
+        # Retrieval uses only the latest question. A follow-up like "and for fathers?" will
+        # search poorly on its own; Phase 3's query rewriting fixes that.
+        sources = await self._retrieve(request.message, trace)
+        prompt = self._render_system_prompt(sources)
         llm_messages = [ChatMessage(role="system", content=prompt.text), *history]
 
         answer_parts: list[str] = []
@@ -155,17 +169,20 @@ class ChatService:
             # The client went away. Keep the partial answer, then let cancellation continue.
             # Shielded: inside a cancelled task, every await would otherwise be cancelled too.
             logger.info("client disconnected from conversation %s", request.conversation_id)
-            trace.finish(output="".join(answer_parts) or None, error="cancelled by client")
-            if answer_parts:
+            partial = "".join(answer_parts)
+            trace.finish(output=partial or None, error="cancelled by client")
+            if partial:
                 with anyio.CancelScope(shield=True):
                     await self._save_assistant_message(
-                        request.conversation_id, "".join(answer_parts), model_id, prompt,
-                        None, "cancelled", trace.trace_id,
+                        request.conversation_id, partial, model_id, prompt, None,
+                        "cancelled", trace.trace_id, citations_for(partial, sources),
                     )  # fmt: skip
             raise
 
         answer = "".join(answer_parts)
         trace.finish(output=answer or None, error=error.message if error else None)
+        # After the answer, not before: only now do we know which sources it actually cited.
+        citations = citations_for(answer, sources)
         message_id: uuid.UUID | None = None
         if answer:  # save complete answers, and partial ones cut off by an error
             message_id = await self._save_assistant_message(
@@ -176,8 +193,11 @@ class ChatService:
                 completion,
                 error.code if error else None,
                 trace.trace_id,
+                citations,
             )
 
+        for citation in citations:
+            yield citation
         if error:
             yield error
         yield DoneEvent(
@@ -252,10 +272,11 @@ class ChatService:
         """Answer one question with the same system prompt, gateway and tracing as the chat,
         but with no history and nothing saved. The eval runner uses this, so evals measure
         what users get without filling the conversation list with test chats."""
-        prompt = self._render_system_prompt()
         trace = self._tracer.start_trace(
             trace_name, input=question, session_id=session_id, tags=tags
         )
+        chunks = await self._retrieve(question, trace)
+        prompt = self._render_system_prompt(chunks)
         messages = [
             ChatMessage(role="system", content=prompt.text),
             ChatMessage(role="user", content=question),
@@ -282,13 +303,50 @@ class ChatService:
             completion=completion,
             prompt_ref=prompt.ref,
             trace_id=trace.trace_id,
+            chunks=chunks,
+            citations=citations_for(answer, chunks),
         )
 
-    def _render_system_prompt(self) -> RenderedPrompt:
+    @property
+    def retriever_name(self) -> str:
+        return self._retriever.name
+
+    async def retrieve(self, question: str) -> list[Chunk]:
+        """Retrieval alone, no LLM: what `evals.run --retrieval-only` measures (free, fast)."""
+        return await self._retriever.retrieve(question, top_k=self._top_k)
+
+    async def _retrieve(self, question: str, trace: Span) -> list[Chunk]:
+        """Retrieve, recorded as a "retriever" step in the trace, so for any answer you can
+        open Langfuse and see exactly which passages the model was given, and their scores."""
+        span = trace.span(
+            "retrieve",
+            as_type="retriever",
+            input=question,
+            metadata={"retriever": self._retriever.name, "top_k": self._top_k},
+        )
+        try:
+            chunks = await self.retrieve(question)
+        except Exception as exc:
+            span.finish(error=f"retrieval failed: {type(exc).__name__}")
+            raise
+        span.finish(
+            output=[
+                {
+                    "document_id": c.document_id,
+                    "heading": c.metadata.get("heading"),
+                    "score": c.score,
+                }
+                for c in chunks
+            ]
+        )
+        return chunks
+
+    def _render_system_prompt(self, chunks: list[Chunk]) -> RenderedPrompt:
         return self._prompts.render(
             "chat_system",
             assistant_name=self._settings.assistant_name,
             today=date.today().isoformat(),
+            sources=format_sources(chunks),
         )
 
     async def _save_assistant_message(
@@ -300,6 +358,7 @@ class ChatService:
         completion: Completion | None,
         error_code: str | None,
         trace_id: str | None,
+        citations: list[CitationEvent],
     ) -> uuid.UUID:
         async with self._session_factory() as session:
             message = Message(
@@ -310,6 +369,8 @@ class ChatService:
                 prompt_ref=prompt.ref,
                 error_code=error_code,
                 trace_id=trace_id,
+                # Stored so a reopened conversation shows the same chips.
+                citations=[c.model_dump() for c in citations] or None,
             )
             if completion:
                 message.input_tokens = completion.input_tokens

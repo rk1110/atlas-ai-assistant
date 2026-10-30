@@ -8,6 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from api.deps import SessionDep, TracerDep
+from core.events import CitationEvent
 from models import Conversation, Message
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
@@ -30,6 +31,7 @@ class MessageOut(BaseModel):
     output_tokens: int | None
     latency_ms: int | None
     trace_url: str | None
+    citations: list[CitationEvent]  # the chips under an answer, same shape as the live event
 
 
 @router.get("")
@@ -66,6 +68,7 @@ async def list_messages(
             output_tokens=m.output_tokens,
             latency_ms=m.latency_ms,
             trace_url=tracer.trace_url(m.trace_id),
+            citations=[CitationEvent.model_validate(c) for c in m.citations or []],
         )
         for m in rows.all()
     ]

@@ -16,7 +16,9 @@ from core.db import get_session, get_session_factory
 from core.llm import LLMGateway
 from core.model_catalog import ModelCatalog
 from core.prompts import PromptRegistry
+from core.rag_config import get_rag_config
 from core.tracing import Tracer, get_tracer
+from retrieval import get_retriever
 from services.chat_service import ChatService
 from services.intent import IntentClassifier
 
@@ -40,7 +42,13 @@ def get_prompts() -> PromptRegistry:
 @lru_cache
 def get_chat_service() -> ChatService:
     return ChatService(
-        get_gateway(), get_prompts(), get_settings(), get_session_factory(), get_tracer()
+        get_gateway(),
+        get_prompts(),
+        get_settings(),
+        get_session_factory(),
+        get_tracer(),
+        get_retriever(),
+        get_rag_config().retrieval.top_k,
     )
 
 

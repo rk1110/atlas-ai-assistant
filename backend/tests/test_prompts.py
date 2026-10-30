@@ -19,7 +19,9 @@ def registry(template: str, variables: list[str]) -> PromptRegistry:
 def test_all_repo_prompts_load_and_render():
     reg = PromptRegistry.from_directory(REPO_ROOT / "prompts")
     assert {"chat_system", "classify_intent"} <= set(reg.names())
-    rendered = reg.render("chat_system", assistant_name="Atlas", today="2026-01-01")
+    rendered = reg.render(
+        "chat_system", assistant_name="Atlas", today="2026-01-01", sources="[1] Doc\ntext"
+    )
     assert rendered.ref.startswith("chat_system@v")  # whichever version is active
     assert "You are Atlas" in rendered.text and "2026-01-01" in rendered.text
 

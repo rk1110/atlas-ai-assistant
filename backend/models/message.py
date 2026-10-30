@@ -8,9 +8,10 @@ the Analytics page (Phase 3/7) without needing to query Langfuse.
 import uuid
 from datetime import datetime
 from decimal import Decimal
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.db import Base
@@ -48,5 +49,8 @@ class Message(Base):
     trace_id: Mapped[str | None] = mapped_column(String(64))  # Langfuse trace (step 5)
     # Set when generation failed part-way: the partial answer is kept, with the reason.
     error_code: Mapped[str | None] = mapped_column(String(32))
+    # The sources the answer cited, as CitationEvent dicts (Phase 2). JSONB rather than a
+    # table: they're always read together with their message and never queried on their own.
+    citations: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")

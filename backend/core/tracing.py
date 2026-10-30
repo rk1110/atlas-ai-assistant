@@ -5,6 +5,7 @@ A trace is the timeline of one request. Inside it are *observations*:
 - a generation: one LLM call, with model, input, output, tokens, cost and latency
 
     trace: chat_turn  (session = conversation id)
+      ├── retriever: retrieve  (question -> 5 chunks with scores)          [Phase 2]
       └── generation: chat  (gpt-oss:120b, 208 in / 53 out tokens, 819 ms to first token)
 
 This module wraps the Langfuse SDK the same way core/llm.py wraps LiteLLM: nothing else in
@@ -110,6 +111,28 @@ class Span:
         except Exception:  # rule 1
             logger.warning("tracing: could not start generation", exc_info=True)
             return Generation(None)
+
+    def span(
+        self,
+        name: str,
+        *,
+        input: Any = None,
+        as_type: str = "span",
+        metadata: dict[str, Any] | None = None,
+    ) -> "Span":
+        """A child step, e.g. `trace.span("retrieve", as_type="retriever")`. Langfuse draws
+        each `as_type` with its own icon, so retrieval stands out next to the LLM call."""
+        if self._obs is None:
+            return Span(None, self._attributes)
+        try:
+            with propagate_attributes(**self._attributes):
+                obs = self._obs.start_observation(
+                    name=name, as_type=as_type, input=input, metadata=metadata
+                )
+            return Span(obs, self._attributes)
+        except Exception:  # rule 1
+            logger.warning("tracing: could not start span %s", name, exc_info=True)
+            return Span(None, self._attributes)
 
     def finish(self, *, output: Any = None, error: str | None = None) -> None:
         if self._obs is None:

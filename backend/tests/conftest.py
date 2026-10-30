@@ -2,8 +2,8 @@
 
 - Tests use the `atlas_test` database (TEST_DATABASE_URL), never your real chat history.
 - Tracing is switched off, so tests never send traces to Langfuse.
-- LLM calls are replaced by `FakeGateway`, embeddings by `FakeEmbedder`: tests are fast, free
-  and deterministic.
+- LLM calls are replaced by `FakeGateway`, embeddings by `FakeEmbedder`, chat retrieval by
+  `FakeRetriever`: tests are fast, free and deterministic.
 
 Run on your Mac (Postgres is published on localhost:5432):  cd backend && uv run pytest
 """
@@ -35,6 +35,7 @@ from sqlalchemy import text  # noqa: E402
 from api.deps import get_chat_service, get_prompts, get_settings  # noqa: E402
 from core.db import get_session_factory  # noqa: E402
 from core.embeddings import Embedder  # noqa: E402
+from core.interfaces.retriever import Chunk, RetrievalFilters, Retriever  # noqa: E402
 from core.llm import ChatMessage, Completion, LLMError, LLMGateway, TextDelta  # noqa: E402
 from core.tracing import Span, Tracer  # noqa: E402
 from main import app  # noqa: E402
@@ -108,16 +109,56 @@ def fake_gateway() -> FakeGateway:
     return FakeGateway()
 
 
+def make_chunk(number: int, text: str, document_id: str | None = None) -> Chunk:
+    return Chunk(
+        id=f"chunk-{number}",
+        document_id=document_id or f"acme-docs:doc-{number}.md",
+        text=text,
+        title=f"Doc {number}",
+        url=None,
+        metadata={"heading": "Policy"},
+        score=0.9 - number / 10,
+    )
+
+
+class FakeRetriever(Retriever):
+    """Returns scripted chunks and records the queries it was asked."""
+
+    name = "fake"
+
+    def __init__(self, chunks: list[Chunk] | None = None):
+        self.chunks = chunks if chunks is not None else [
+            make_chunk(1, "Employees get 22 vacation days per year."),
+            make_chunk(2, "Meals on business trips are covered up to $60 per day."),
+        ]  # fmt: skip
+        self.queries: list[str] = []
+
+    async def retrieve(
+        self, query: str, filters: RetrievalFilters | None = None, top_k: int = 5
+    ) -> list[Chunk]:
+        self.queries.append(query)
+        return self.chunks[:top_k]
+
+
 @pytest.fixture
-async def client(db: None, fake_gateway: FakeGateway) -> AsyncIterator[AsyncClient]:
-    """HTTP client calling the FastAPI app in-process, with the fake LLM swapped in via
-    dependency_overrides (the reason routes receive services through Depends)."""
+def fake_retriever() -> FakeRetriever:
+    return FakeRetriever()
+
+
+@pytest.fixture
+async def client(
+    db: None, fake_gateway: FakeGateway, fake_retriever: FakeRetriever
+) -> AsyncIterator[AsyncClient]:
+    """HTTP client calling the FastAPI app in-process, with the fake LLM and retriever swapped
+    in via dependency_overrides (the reason routes receive services through Depends)."""
     service = ChatService(
         fake_gateway,
         get_prompts(),
         get_settings(),
         get_session_factory(),
         Tracer(None, "http://langfuse.test", "atlas"),
+        fake_retriever,
+        top_k=5,
     )
     app.dependency_overrides[get_chat_service] = lambda: service
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
