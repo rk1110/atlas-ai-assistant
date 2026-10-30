@@ -8,16 +8,31 @@ dependencies = [
     "alembic==1.20.0",
     "anyio==4.15.1",
     "asyncpg==0.32.0",
+    "beautifulsoup4==4.15.0",
     "fastapi==0.143.0",
     "langfuse==4.17.0",
     "litellm==1.105.0",
     "pgvector==0.5.1",
     "pydantic==2.14.1",
     "pydantic-settings==2.15.0",
+    "pypdf==6.20.1",
+    "python-multipart==0.0.32",
     "pyyaml==6.0.3",
+    "sentence-transformers==6.1.0",
     "sqlalchemy[asyncio]==2.1.4",
+    "torch==2.14.1",
     "uvicorn[standard]==0.54.0",
 ]
+
+# torch from PyTorch's CPU-only index on Linux (the Docker image): the default PyPI build can
+# pull in GPU libraries we'd never use. macOS wheels on PyPI are already CPU/Apple-GPU only.
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true  # only packages listed in [tool.uv.sources] come from here
 
 [tool.ruff]
 line-length = 100

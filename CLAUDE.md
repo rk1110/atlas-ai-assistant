@@ -76,6 +76,9 @@ cd backend && uv run ruff check . && uv run ruff format .   # lint + format
 docker compose exec backend python -m evals.run             # eval suite (real model calls)
 docker compose exec backend python -m evals.run --model gpt-oss-20b-cloud --notes "what changed"
 docker compose exec backend python -m scripts.smoke_llm     # one streamed reply per model
+docker compose exec backend python -m ingestion.run          # load data/ into the knowledge base (skips unchanged)
+docker compose exec backend python -m ingestion.run --force  # re-embed all (after changing config/rag.yaml)
+cd backend && uv run python -m scripts.fetch_gitlab_handbook # refresh data/gitlab at the pinned commit
 
 docker compose exec backend alembic revision --autogenerate --rev-id 000N -m "what"  # new migration (review it!)
 docker compose exec backend alembic upgrade head            # apply migrations (also runs on backend start)
@@ -95,7 +98,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | Phase | Name | Status |
 | --- | --- | --- |
 | 1 | Foundation (app shell, streaming chat, gateway, tracing, eval scaffold) | Done (2026-10-29; exercise 3 solved by Claude at my request) |
-| 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | Not started |
+| 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | In progress: checkpoint A (ingestion) done |
 | 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Not started |
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Not started |
 | 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Not started |

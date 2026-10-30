@@ -3,7 +3,8 @@ which Alembic compares against the real database to autogenerate migrations.
 Add each new model module here, or Alembic won't see its table."""
 
 from models.conversation import Conversation
+from models.document import ChunkRecord, DocumentRecord
 from models.eval import EvalResult, EvalRun
 from models.message import Message
 
-__all__ = ["Conversation", "EvalResult", "EvalRun", "Message"]
+__all__ = ["ChunkRecord", "Conversation", "DocumentRecord", "EvalResult", "EvalRun", "Message"]

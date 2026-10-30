@@ -7,6 +7,10 @@
 #   expected_answer  the facts a correct answer must contain (not the exact wording)
 #   expected_sources document ids that contain the answer. Phase 2 measures whether retrieval
 #                    finds them (hit rate, MRR). Ids are "<source>:<path>" like Document.id.
+#                    Several ids = any of them counts as a hit.
+#
+# GitLab answers were checked against the handbook pages in data/gitlab/ (pinned commit,
+# 2026-10-30). If you refresh those pages, re-check these answers: the handbook changes.
 #   tags             for filtering runs: --tag gitlab
 #
 # Phase 1 has no retrieval, so answers come from the model's general knowledge: expect GitLab
@@ -29,7 +33,9 @@ questions:
 
   - id: gitlab-mission
     question: What is GitLab's mission?
-    expected_answer: To make it so that everyone can contribute.
+    expected_answer: >
+      Unlock every team to ship trusted software at the speed of imagination. (The original
+      mission was "everyone can contribute"; the handbook updated it for the AI era.)
     expected_sources: ["gitlab-handbook:/handbook/company/mission/"]
     tags: [gitlab, company]
 
@@ -77,7 +83,7 @@ questions:
     expected_answer: >
       Public: the handbook is published openly on the internet, as part of GitLab's
       transparency value (only a small set of sensitive topics is kept internal).
-    expected_sources: ["gitlab-handbook:/handbook/about/"]
+    expected_sources: ["gitlab-handbook:/handbook/about/handbook-usage/", "gitlab-handbook:/handbook/about/"]
     tags: [gitlab, culture]
 
   - id: gitlab-async
@@ -85,7 +91,9 @@ questions:
     expected_answer: >
       Asynchronous communication: work is done in writing (issues, merge requests, the
       handbook) by default, and meetings are used only when synchronous discussion is needed.
-    expected_sources: ["gitlab-handbook:/handbook/company/culture/all-remote/asynchronous/"]
+    expected_sources:
+      - "gitlab-handbook:/handbook/communication/"
+      - "gitlab-handbook:/handbook/communication/sync-vs-async-culture/"
     tags: [gitlab, communication]
 
   - id: gitlab-boring-solutions

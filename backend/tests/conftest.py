@@ -2,12 +2,16 @@
 
 - Tests use the `atlas_test` database (TEST_DATABASE_URL), never your real chat history.
 - Tracing is switched off, so tests never send traces to Langfuse.
-- LLM calls are replaced by `FakeGateway`: tests are fast, free and deterministic.
+- LLM calls are replaced by `FakeGateway`, embeddings by `FakeEmbedder`: tests are fast, free
+  and deterministic.
 
 Run on your Mac (Postgres is published on localhost:5432):  cd backend && uv run pytest
 """
 
+import hashlib
+import math
 import os
+import re
 import subprocess
 import sys
 from collections.abc import AsyncIterator
@@ -30,6 +34,7 @@ from sqlalchemy import text  # noqa: E402
 
 from api.deps import get_chat_service, get_prompts, get_settings  # noqa: E402
 from core.db import get_session_factory  # noqa: E402
+from core.embeddings import Embedder  # noqa: E402
 from core.llm import ChatMessage, Completion, LLMError, LLMGateway, TextDelta  # noqa: E402
 from core.tracing import Span, Tracer  # noqa: E402
 from main import app  # noqa: E402
@@ -55,7 +60,10 @@ async def db() -> None:
     """Empty tables before a test that touches the database."""
     async with get_session_factory()() as session:
         await session.execute(
-            text("TRUNCATE conversations, messages, eval_runs, eval_results CASCADE")
+            text(
+                "TRUNCATE conversations, messages, eval_runs, eval_results, documents, chunks"
+                " CASCADE"
+            )
         )
         await session.commit()
 
@@ -115,3 +123,39 @@ async def client(db: None, fake_gateway: FakeGateway) -> AsyncIterator[AsyncClie
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
         yield http
     app.dependency_overrides.clear()
+
+
+class FakeEmbedder(Embedder):
+    """Deterministic stand-in for the embedding model: no download, no torch, instant.
+
+    Tokens = words. Vectors = a normalised bag of words (each word hashed into one of 384
+    slots), so texts sharing words still get similar vectors and retrieval tests behave
+    sensibly, just with "same words" instead of "same meaning".
+    """
+
+    dimensions = 384
+
+    def __init__(self) -> None:
+        self.calls: list[list[str]] = []
+
+    async def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        self.calls.append(texts)
+        return [self._vector(t) for t in texts]
+
+    async def embed_query(self, text: str) -> list[float]:
+        return self._vector(text)
+
+    def count_tokens(self, text: str) -> int:
+        return len(text.split())
+
+    def _vector(self, text: str) -> list[float]:
+        vector = [0.0] * self.dimensions
+        for word in re.findall(r"[a-z0-9]+", text.lower()):
+            vector[int(hashlib.md5(word.encode()).hexdigest(), 16) % self.dimensions] += 1.0
+        norm = math.sqrt(sum(v * v for v in vector)) or 1.0
+        return [v / norm for v in vector]
+
+
+@pytest.fixture
+def fake_embedder() -> FakeEmbedder:
+    return FakeEmbedder()

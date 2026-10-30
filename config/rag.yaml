@@ -1,0 +1,36 @@
+# RAG settings: how documents become searchable chunks, and how they're searched.
+# Restart the backend after editing. Changing the embedding model or chunking means
+# re-ingesting everything: `python -m ingestion.run --force`.
+
+embedding:
+  # A small, strong open-source model that runs on CPU: 33M parameters, 384 numbers per text.
+  model: BAAI/bge-small-en-v1.5
+  # Must match the vector(N) column in migration 0003. A model with a different size needs
+  # a new migration (and a full re-ingest).
+  dimensions: 384
+  batch_size: 32
+  # BGE models were trained with this instruction in front of *queries* (not passages).
+  # Short questions and long passages look different; the prefix tells the model "this is a
+  # search query", which measurably improves retrieval for BGE.
+  query_prefix: "Represent this sentence for searching relevant passages: "
+
+chunking:
+  # Sizes are in tokens of the embedding model. BGE reads at most 512 tokens; anything
+  # longer is silently cut off, so chunks must stay well below that.
+  chunk_size: 350
+  # Repeat the end of one chunk at the start of the next, so a sentence that straddles a
+  # boundary is still whole in at least one chunk.
+  chunk_overlap: 50
+  # Pieces smaller than this are merged into a neighbour instead of becoming tiny chunks.
+  min_chunk_size: 40
+
+retrieval:
+  top_k: 5
+
+sources:
+  - name: gitlab-handbook
+    kind: gitlab_handbook
+    path: data/gitlab
+  - name: acme-docs
+    kind: acme_docs
+    path: data/acme

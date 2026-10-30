@@ -194,3 +194,18 @@ Reports: `20261028-045212_b7fb4019.json` (v1), `20261029-132505_ee5684e0.json` (
 - **Every prompt line is paid on every call:** +16 input tokens per question here; small, but it scales with traffic and history.
 - **Caveats:** one run each; answer quality not scored yet (Phase 3 LLM-as-judge). The UI small print doesn't show the prompt version; it is in the `done` event, the database and Langfuse.
 - **Alternatives:** stay on v1 (longer, more complete answers); enforce length with `max_tokens` (can cut answers mid-sentence).
+
+## 2026-10-30 · Phase 2 checkpoint A: knowledge base ingestion
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Local embeddings: `sentence-transformers` 6.1.0 + `BAAI/bge-small-en-v1.5` (384 dims), CPU-only `torch` 2.14.1 from PyTorch's CPU index on Linux | Free, offline, fast enough on CPU for ~850 chunks; small vectors keep the index small. CPU index avoids GPU libraries in the image | `bge-base` (768 dims, slower, maybe better: exercise); `fastembed` (no torch, less standard); API embeddings (cost, network) |
+| `core/embeddings.py` as an embedding gateway with an `Embedder` interface; model lazy-loaded on first use | Same reasoning as the LLM gateway: one place to swap models; tests inject `FakeEmbedder`; API startup stays instant | Calling sentence-transformers directly from ingestion and retrieval |
+| BGE query prefix ("Represent this sentence for searching relevant passages: ") on queries only | BGE was trained that way; improves retrieval of passages for short questions | No prefix |
+| Heading-aware recursive chunker: headings → paragraphs → sentences → word windows; 350 tokens, 50 overlap, merge chunks under 40 tokens | Keeps passages on one topic and records the heading path; never cuts a paragraph that fits. Real corpus: median 143 tokens, max 381 incl. header (< 512 BGE limit) | Fixed-size windows (cuts mid-sentence); semantic chunking (Phase 3 comparison) |
+| Contextual chunk headers: embed `"<title> / <heading path>\n\n<text>"`, store clean text | A passage like "up to 5 days carry over" needs its context ("Time Off Policy / Vacation") in the vector to match questions | Embed raw chunk text only |
+| `documents` + `chunks` tables (migration 0003), `vector(384)`, HNSW index with `vector_cosine_ops`; chunks replaced per document in one transaction | Principle 5 (one DB); HNSW avoids scanning every row; searches never see half-updated documents | IVFFlat (needs training on existing data); a separate vector DB (Pinecone, Qdrant) |
+| Re-ingestion skips documents by sha256 content hash; sources prune documents they no longer yield; failures are recorded per document and the run continues | Cheap re-runs; the index matches the folders; one bad file doesn't stop an import | Always re-embed everything; stop on first error |
+| GitLab corpus: 35 handbook pages fetched at a pinned commit by `scripts/fetch_gitlab_handbook.py` and committed to `data/gitlab/` | Reproducible scores; ingestion needs no network | Crawl handbook.gitlab.com live (pages now redirect to a login for some paths; scores would drift) |
+| Golden set updated to today's handbook: GitLab's mission is now "Unlock every team to ship trusted software at the speed of imagination"; async → `/handbook/communication/`; public handbook → `handbook-usage` | The eval must match the corpus it's measured against | Keep stale answers (would mark correct answers wrong) |
+| Acme corpus: 12 synthetic docs written to state every golden-set fact exactly once, plus distractors (travel policy's $60 meal allowance vs the expense policy's $75 client meals) | Known ground truth for hit rate and citation checks; distractors make retrieval non-trivial | Only "easy" docs |

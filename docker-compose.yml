@@ -185,6 +185,8 @@ services:
       LANGFUSE_PUBLIC_KEY: ${LANGFUSE_PUBLIC_KEY:?set in .env}
       LANGFUSE_SECRET_KEY: ${LANGFUSE_SECRET_KEY:?set in .env}
       OTEL_SERVICE_NAME: atlas-backend  # how this service is labelled on every trace
+      # 1 = use the cached embedding model only, never contact Hugging Face (see .env.example).
+      HF_HUB_OFFLINE: ${HF_HUB_OFFLINE:-0}
     extra_hosts:
       - "host.docker.internal:host-gateway" # reach Ollama on your Mac (also needed on Linux)
     ports:
@@ -197,6 +199,10 @@ services:
       - ./backend:/app/backend
       - ./prompts:/app/prompts
       - ./config:/app/config
+      - ./data:/app/data:ro  # knowledge-base source documents (read-only: ingestion never edits them)
+      # The embedding model (~130 MB) downloads from Hugging Face on first use; a named volume
+      # keeps it across container rebuilds instead of re-downloading every time.
+      - hf_cache:/root/.cache/huggingface
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -231,6 +237,7 @@ services:
 
 volumes:
   postgres_data:
+  hf_cache:
   redis_data:
   clickhouse_data:
   clickhouse_logs:

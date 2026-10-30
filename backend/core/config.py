@@ -56,6 +56,7 @@ class Settings(BaseSettings):
 
     # --- Versioned config that lives in the repo, not in .env ---
     models_file: Path = REPO_ROOT / "config" / "models.yaml"
+    rag_file: Path = REPO_ROOT / "config" / "rag.yaml"
     prompts_dir: Path = REPO_ROOT / "prompts"
 
     @field_validator(
