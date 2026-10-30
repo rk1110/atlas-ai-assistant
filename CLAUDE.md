@@ -90,7 +90,7 @@ cd frontend && npm run dev                                  # frontend outside D
 
 | URL | What |
 | --- | --- |
-| http://localhost:3000 | Atlas web app |
+| http://localhost:3000 | Atlas web app (Knowledge Base: /knowledge) |
 | http://localhost:8000/docs | Backend API docs |
 | http://localhost:3001 | Langfuse (traces; login from `.env`) |
 
@@ -99,7 +99,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | Phase | Name | Status |
 | --- | --- | --- |
 | 1 | Foundation (app shell, streaming chat, gateway, tracing, eval scaffold) | Done (2026-10-29; exercise 3 solved by Claude at my request) |
-| 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | In progress: checkpoints A (ingestion) and B (retrieval + citations, cited correct 90%) done |
+| 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | Built (checkpoints A–C, cited correct 90%); walkthrough written; quiz + exercises pending |
 | 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Not started |
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Not started |
 | 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Not started |

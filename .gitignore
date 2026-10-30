@@ -32,3 +32,6 @@ npm-debug.log*
 # --- Project ---
 backend/evals/results/
 *.log
+
+# --- Atlas: Knowledge Base uploads (Docker uses a volume; this is for local runs) ---
+uploads/

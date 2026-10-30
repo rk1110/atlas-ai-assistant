@@ -107,6 +107,12 @@ class IngestionPipeline:
             document.id, "ingested", chunks=len(drafts), seconds=time.perf_counter() - started
         )
 
+    async def mark_pending(self, document: Document) -> None:
+        """Show a document as "pending" before a background task ingests it, so the Knowledge
+        Base page lists it immediately. (If the server restarts before the task runs, it stays
+        pending until the next `ingestion.run`, which processes anything not "ready".)"""
+        await self._upsert_record(document, _hash(document.content), status="pending")
+
     # ------------------------------------------------------------------ database steps
 
     async def _is_unchanged(self, document_id: str, content_hash: str) -> bool:

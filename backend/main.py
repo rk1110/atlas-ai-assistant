@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from api import chat, classify, conversations, models
+from api import chat, classify, conversations, knowledge, models
 from api.deps import SessionDep, get_settings
 from core.embeddings import get_embedder
 from core.tracing import get_tracer
@@ -59,6 +59,7 @@ app.add_middleware(
 app.include_router(chat.router)
 app.include_router(classify.router)
 app.include_router(conversations.router)
+app.include_router(knowledge.router)
 app.include_router(models.router)
 
 

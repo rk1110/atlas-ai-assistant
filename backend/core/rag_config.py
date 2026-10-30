@@ -37,7 +37,7 @@ class RetrievalConfig(BaseModel):
 
 class SourceConfig(BaseModel):
     name: str
-    kind: Literal["gitlab_handbook", "acme_docs"]
+    kind: Literal["gitlab_handbook", "acme_docs", "uploads"]
     path: Path  # relative to the repo root
 
     @property
@@ -45,11 +45,20 @@ class SourceConfig(BaseModel):
         return self.path if self.path.is_absolute() else REPO_ROOT / self.path
 
 
+class UploadsConfig(BaseModel):
+    max_file_mb: float = Field(default=10, gt=0)
+    extensions: list[str] = Field(default_factory=lambda: [".md", ".txt", ".html", ".pdf"])
+
+
 class RagConfig(BaseModel):
     embedding: EmbeddingConfig
     chunking: ChunkingConfig
     retrieval: RetrievalConfig = RetrievalConfig()
     sources: list[SourceConfig] = Field(default_factory=list)
+    uploads: UploadsConfig = UploadsConfig()
+
+    def source_of_kind(self, kind: str) -> SourceConfig | None:
+        return next((s for s in self.sources if s.kind == kind), None)
 
     @classmethod
     def from_file(cls, path: Path) -> "RagConfig":

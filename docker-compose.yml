@@ -203,6 +203,8 @@ services:
       # The embedding model (~130 MB) downloads from Hugging Face on first use; a named volume
       # keeps it across container rebuilds instead of re-downloading every time.
       - hf_cache:/root/.cache/huggingface
+      # Files uploaded on the Knowledge Base page (the `uploads` source in config/rag.yaml).
+      - uploads:/app/uploads
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)"]
       interval: 10s
@@ -238,6 +240,7 @@ services:
 volumes:
   postgres_data:
   hf_cache:
+  uploads:
   redis_data:
   clickhouse_data:
   clickhouse_logs:

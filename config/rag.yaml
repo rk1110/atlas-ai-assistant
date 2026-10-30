@@ -34,3 +34,13 @@ sources:
   - name: acme-docs
     kind: acme_docs
     path: data/acme
+  # Files uploaded on the Knowledge Base page. Stored in a Docker volume (not data/, which is
+  # read-only in the container), so `ingestion.run --force` re-embeds them like everything else.
+  - name: uploads
+    kind: uploads
+    path: uploads
+
+uploads:
+  max_file_mb: 10
+  # Each needs a parser (ingestion/parsers). Scanned PDFs have no text layer: OCR is Phase 6.
+  extensions: [.md, .markdown, .txt, .html, .htm, .pdf]

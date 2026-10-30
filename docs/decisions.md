@@ -226,3 +226,16 @@ Reports: `20261028-045212_b7fb4019.json` (v1), `20261029-132505_ee5684e0.json` (
 | shadcn components import `cn` from `@/lib/utils` instead of the `cn` package | `cn` was only resolvable as a transitive dependency of the `shadcn` CLI (dev dependency); `shadcn add` also tried to add it to package.json (reverted) | Add `cn` 0.5.1 as a dependency (an unapproved new library) |
 
 **Results** (gpt-oss-120b, 20 questions, run `6714fe10`): hit rate 90%, MRR 0.77, **cited correct 90%** (target 80%), 0 errors, avg latency 1.1 s, ~1,025 input tokens per question (was ~220 without sources). After the label fix, retrieval-only: hit rate 95%, MRR 0.82. Remaining miss: `gitlab-mvc`; the model correctly said it couldn't find it instead of guessing (acronym; Phase 3 hybrid search).
+
+## 2026-10-30 · Phase 2 checkpoint C: Knowledge Base page
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Uploads are a `DataSource` (`UploadSource`) over a folder in a Docker volume (`uploads`), listed in `config/rag.yaml` | `ingestion.run --force` re-embeds uploads like everything else; deleting the file prunes the document on the next run | Store upload bytes only in Postgres (re-embedding would need a separate path); write into `data/` (read-only in the container, and committed to git) |
+| Upload returns 202 with status `pending`; ingestion runs in a FastAPI `BackgroundTasks` task; the page polls every 1 s while anything is pending/processing | Long PDFs take seconds to minutes; the request must not wait. Background tasks need no extra infrastructure | Redis job queue (retries, multiple workers: Phase 7 if needed); pushing progress over SSE |
+| Upload checks: extension allow-list and size limit from `rag.yaml` (10 MB), empty files rejected, file names sanitised to `[A-Za-z0-9._-]` and stripped of directories | Never trust a client-supplied file name (path traversal); only formats we can parse | Content sniffing by magic bytes (stronger; worth it once uploads come from outside the team) |
+| Only uploaded documents can be deleted from the UI | GitLab/Acme documents come from `data/` and would reappear on the next ingestion run | Allow deleting anything (confusing) |
+| Document ids travel as query parameters (`?document_id=`) | Ids contain `:` and `/` | Path parameters with URL-encoding (fragile with proxies) |
+| `GET /api/knowledge/config` serves upload limits, top-k and the embedding model to the page | Principle 8: the UI reads config instead of duplicating it | Hard-code `.md,.pdf,...` in the frontend |
+| Retrieval tester on the page (`GET /api/knowledge/search`, no LLM) | Shows exactly which passages the chat would get, with scores; free and instant for debugging | Only look at Langfuse traces |
+| `app/knowledge/loading.tsx` as the Suspense boundary | Next 16 (cacheComponents) warns when request-time data is read outside Suspense; the header and skeleton now render instantly | `export const instant = false` (blocking page) |

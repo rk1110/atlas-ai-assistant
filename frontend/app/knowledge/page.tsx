@@ -1,24 +1,20 @@
-import { BookOpen } from "lucide-react";
+import { connection } from "next/server";
 
+import { KnowledgeView } from "@/components/knowledge/knowledge-view";
 import { PageHeader } from "@/components/page-header";
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { api } from "@/lib/api";
 
-export default function KnowledgePage() {
+/**
+ * Knowledge Base. The document list is fetched on the server so the page arrives filled in;
+ * the client view then handles uploads and polls for ingestion progress.
+ */
+export default async function KnowledgePage() {
+  await connection(); // per-request data: never prerender
+  const [documents, config] = await Promise.all([api.documents(), api.knowledgeConfig()]);
   return (
     <>
       <PageHeader title="Knowledge Base" />
-      <PagePlaceholder
-        icon={BookOpen}
-        phase={2}
-        title="Your company's documents, searchable"
-        summary="Atlas will read the GitLab handbook and the Acme Corp docs, split them into passages, and answer with citations you can click."
-        features={[
-          "Drag-and-drop upload for PDF, HTML and Markdown",
-          "Live ingestion progress for each document",
-          "Chunk viewer: see exactly what Atlas retrieves",
-          "Embedding map of documents clustered by topic (Phase 3)",
-        ]}
-      />
+      <KnowledgeView initialDocuments={documents} config={config} />
     </>
   );
 }

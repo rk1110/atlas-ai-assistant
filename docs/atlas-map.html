@@ -182,8 +182,8 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 <div class="wrap">
   <header class="head">
     <div class="fix">
-      <span>Position: <b>Phase 2 · checkpoint B done (RAG answers cite the right source 90%)</b></span>
-      <span>Next: <b>Phase 2 · checkpoint C: Knowledge Base page + walkthrough</b></span>
+      <span>Position: <b>Phase 2 built: RAG, citations, Knowledge Base page</b></span>
+      <span>Next: <b>Phase 2 quiz + your 3 exercises, then Phase 3</b></span>
       <span>Updated <b>2026-10-30</b></span>
     </div>
     <h1>Atlas Map</h1>
@@ -245,8 +245,8 @@ const NODES = {
   chips:    { layer: "Browser", name: "Citation chips", file: "frontend/components/chat/citation-chip.tsx + answer-markdown.tsx", status: "built",
               what: "Turns each [1] in an answer into a small clickable chip, plus a Sources row. Clicking shows the exact passage, its heading and a link to the page.",
               concept: "<strong>Verifiable answers.</strong> Users can check a claim against the source instead of trusting the model." },
-  kbpage:   { layer: "Browser", name: "Knowledge Base page", file: "frontend/app/knowledge/", status: "next",
-              what: "Upload documents, watch ingestion progress, and browse the chunks of any document.",
+  kbpage:   { layer: "Browser", name: "Knowledge Base page", file: "frontend/app/knowledge/ + components/knowledge/", status: "built",
+              what: "Upload documents (202 + background ingestion), watch status change from Queued to Ready, test retrieval with scores, and read every chunk of any document.",
               concept: "<strong>Background jobs.</strong> Ingestion takes seconds to minutes, so the page polls a status instead of waiting." },
   eventsts: { layer: "Browser", name: "Event types", file: "frontend/lib/events.ts", status: "built",
               what: "TypeScript copy of the seven event shapes, so the UI knows exactly what each `type` carries.",
@@ -256,6 +256,9 @@ const NODES = {
               concept: "<strong>Validate first.</strong> Once streaming starts the HTTP status is already 200, so later problems travel as error events." },
   convapi:  { layer: "API", name: "Conversations", file: "backend/api/conversations.py", status: "built",
               what: "List, open and delete past chats. Feeds the sidebar.", concept: "<strong>REST endpoints.</strong> Plain JSON, no streaming." },
+  kbapi:    { layer: "API", name: "Knowledge API", file: "backend/api/knowledge.py", status: "built",
+              what: "List documents and chunks, upload (202 Accepted, ingested in a background task), delete uploads, and test search without the LLM.",
+              concept: "<strong>Async work.</strong> Answer the request at once, do the slow part after, let the page poll for status." },
   modelsapi:{ layer: "API", name: "GET /api/models", file: "backend/api/models.py", status: "built",
               what: "The model dropdown's options, with a live 'available' flag for each.", concept: "<strong>Config-driven UI.</strong> The frontend never hard-codes model names." },
   service:  { layer: "Service", name: "Chat service", file: "backend/services/chat_service.py", status: "built",
@@ -364,7 +367,7 @@ const CHECKPOINTS = [
   { name: "Phase 1", status: "built", items: ["Streaming chat, gateway, tracing", "Eval scaffold, quiz, exercises"] },
   { name: "Checkpoint A", status: "built", items: ["Corpus: 35 GitLab + 12 Acme docs", "Chunker, BGE embeddings, pgvector HNSW"] },
   { name: "Checkpoint B", status: "built", items: ["Vector retriever, prompt v3, citation chips", "Evals: hit rate 95%, MRR 0.82, cited 90%"] },
-  { name: "Checkpoint C", status: "next", items: ["Knowledge Base page: upload, progress, chunks", "Walkthrough, quiz, exercises"] },
+  { name: "Checkpoint C", status: "built", items: ["Knowledge Base page: upload, progress, retrieval tester, chunks", "Walkthrough docs/walkthroughs/phase-2.md"] },
 ];
 
 const PHASES = [
