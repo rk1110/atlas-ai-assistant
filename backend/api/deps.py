@@ -10,17 +10,21 @@ from functools import lru_cache
 from typing import Annotated
 
 from fastapi import Depends
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agents.assistant import AssistantAgent
 from agents.checkpoints import get_checkpointer
 from agents.graph import build_graph
 from agents.runner import AgentRunner
+from agents.team import build_team_graph
+from agents.team_agents import PlannerAgent, VerifierAgent
 from core.agent_config import get_agent_config
 from core.config import Settings, get_settings
 from core.db import get_session, get_session_factory
 from core.embeddings import get_embedder
 from core.interfaces.retriever import Retriever
+from core.interfaces.tool import Tool
 from core.llm import LLMGateway
 from core.memory_config import get_memory_config
 from core.model_catalog import ModelCatalog
@@ -102,11 +106,35 @@ def get_summarizer() -> ConversationSummarizer:
 
 @lru_cache
 def get_agent_runner() -> AgentRunner:
-    """The tool-using agent (Phase 4). Built on first use, after main.py's startup has opened
-    the Postgres checkpointer, so paused runs survive restarts."""
-    tools = list(get_tools())
-    assistant = AssistantAgent(get_gateway(), get_prompts(), get_settings(), tools)
-    graph = build_graph(assistant, tools, get_checkpointer(), get_agent_config().max_model_calls)
+    """The agent for action requests: the Phase 5 team, or the Phase 4 single agent
+    (`mode` in config/agent.yaml). Built on first use, after main.py's startup has opened the
+    Postgres checkpointer, so paused runs survive restarts."""
+    return build_agent_runner(get_agent_config().mode, list(get_tools()), get_checkpointer())
+
+
+def build_agent_runner(
+    mode: str, tools: list[Tool], checkpointer: BaseCheckpointSaver
+) -> AgentRunner:
+    gateway, prompts, settings = get_gateway(), get_prompts(), get_settings()
+    config = get_agent_config()
+    if mode == "single":
+        assistant = AssistantAgent(gateway, prompts, settings, tools)
+        return AgentRunner(build_graph(assistant, tools, checkpointer, config.max_model_calls))
+    research_tools = [t for t in tools if not t.requires_approval and t.name != "calculator"]
+    org_chart = [t for t in tools if t.name == "query_org_chart"]
+    action_tools = [*org_chart, *(t for t in tools if t.requires_approval)]
+    graph = build_team_graph(
+        PlannerAgent(gateway, prompts, settings),
+        AssistantAgent(gateway, prompts, settings, research_tools, name="researcher",
+                       prompt_name="team_researcher", title="Researching"),
+        AssistantAgent(gateway, prompts, settings, action_tools, name="action",
+                       prompt_name="team_action", title="Acting"),
+        VerifierAgent(gateway, prompts),
+        research_tools,
+        action_tools,
+        checkpointer,
+        config.team_max_model_calls,
+    )  # fmt: skip
     return AgentRunner(graph)
 
 

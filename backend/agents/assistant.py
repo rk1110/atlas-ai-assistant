@@ -1,8 +1,12 @@
-"""The assistant: the model step of the agent loop.
+"""A tool-using agent: the model step of an agent loop.
 
-Each turn it sees the system prompt, the conversation so far (including every tool result)
-and the tool definitions, and returns either a final answer or tool calls. It implements
-the framework-free `Agent` interface; graph.py adapts it into a LangGraph node.
+Each turn it sees its system prompt, the conversation so far (including every tool result)
+and its tool definitions, and returns either a final text or tool calls. It implements the
+framework-free `Agent` interface; graph.py / team.py adapt it into LangGraph nodes.
+
+The single agent (Phase 4) is one of these with every tool. In the team (Phase 5) the
+Researcher and the Action agent are two of these, each with its own prompt and only its
+own tools: a narrow toolset makes each specialist's choices easier and safer.
 """
 
 from datetime import date
@@ -22,26 +26,38 @@ class AssistantAgent(Agent):
     description = "Answers from the knowledge base and takes actions with tools."
 
     def __init__(
-        self, gateway: LLMGateway, prompts: PromptRegistry, settings: Settings, tools: list[Tool]
+        self,
+        gateway: LLMGateway,
+        prompts: PromptRegistry,
+        settings: Settings,
+        tools: list[Tool],
+        *,
+        name: str = "assistant",
+        prompt_name: str = "agent_system",
+        title: str = "Thinking",
     ):
         self._gateway = gateway
         self._prompts = prompts
         self._settings = settings
         self._definitions = [t.definition() for t in tools]
+        self.name = name  # type: ignore[misc]  # "assistant", "researcher", "action"
+        self._prompt_name = prompt_name
+        self._title = title
 
     async def run(self, state: AgentState, emit: EventEmitter) -> dict[str, Any]:
         step = int(state.scratch.get("model_calls", 0)) + 1
-        step_id = f"think-{step}"
+        step_id = f"{self.name}-{step}"
         await emit(
             AgentStepEvent(
-                step_id=step_id, agent=self.name, status="started", title="Thinking", detail=None
+                step_id=step_id, agent=self.name, status="started", title=self._title, detail=None
             )
         )
         prompt = self._prompts.render(
-            "agent_system",
+            self._prompt_name,
             assistant_name=self._settings.assistant_name,
             today=date.today().isoformat(),
             memory=state.scratch.get("memory", "(nothing yet)"),
+            **state.scratch.get("prompt_vars", {}),  # e.g. the team's task and notes
         )
         trace: Span | None = state.scratch.get("trace")
         turn = await self._gateway.complete_with_tools(
@@ -55,14 +71,14 @@ class AssistantAgent(Agent):
         detail = (
             "Decided to use " + ", ".join(sorted({c.name for c in turn.tool_calls}))
             if turn.tool_calls
-            else "Writing the answer"
+            else ("Writing the answer" if self.name == "assistant" else "Reporting back")
         )
         await emit(
             AgentStepEvent(
                 step_id=step_id,
                 agent=self.name,
                 status="completed",
-                title="Thinking",
+                title=self._title,
                 detail=detail,
             )
         )

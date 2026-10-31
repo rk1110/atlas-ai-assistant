@@ -117,7 +117,7 @@ class AgentRunner:
         values = (await self._graph.aget_state(_config(thread_id))).values
         yield AgentOutcome(
             status="paused" if paused else "finished",
-            answer="" if paused else _final_answer(values["messages"]),
+            answer="" if paused else _final_answer(values),
             sources=[Chunk(**s) for s in values["sources"]],
             completions=context.completions,
         )
@@ -127,7 +127,10 @@ def _config(thread_id: str) -> dict[str, Any]:
     return {"configurable": {"thread_id": thread_id}}
 
 
-def _final_answer(messages: list[dict[str, Any]]) -> str:
+def _final_answer(values: dict[str, Any]) -> str:
+    if "final" in values or "plan" in values:  # the team: the Verifier-approved answer
+        return values.get("final") or STEP_LIMIT_ANSWER
+    messages = values["messages"]
     last = messages[-1] if messages else {}
     if last.get("role") != "assistant" or last.get("tool_calls"):
         return STEP_LIMIT_ANSWER  # stopped by max_model_calls while still calling tools

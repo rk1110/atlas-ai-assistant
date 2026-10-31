@@ -7,5 +7,10 @@ enabled: true
 # faster RAG path. Labels come from prompts/classify_intent.yaml.
 route_intents: [action_request]
 
-# Safety net against loops: the agent may call the model at most this many times per turn.
-max_model_calls: 6
+# team = Planner, Researcher, Action agent and Verifier (Phase 5); single = one agent with
+# every tool (Phase 4). Compare them: python -m evals.agent_run --mode single|team
+mode: team
+
+# Safety net against loops: the model may be called at most this many times per turn.
+max_model_calls: 6        # single agent
+team_max_model_calls: 14  # the whole team (plan + specialists + write + verify)

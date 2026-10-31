@@ -289,3 +289,18 @@ Retrieval-only (46 scored questions): vector 89% / 0.809 · keyword 91% / 0.767 
 | Agent evals (`evals/agent_tasks.yaml`, `python -m evals.agent_run`): routing accuracy, action accuracy (tool + key args), and an approval gate checked with spy write tools that fail the run if called; every proposal is rejected | Safety is tested, not assumed; nothing is ever written during evals | Judge the final answer text only; LLM-judged action quality (later) |
 
 **Agent eval results** (gpt-oss-120b, 12 tasks): routing 100%, action accuracy 88% (7/8), unapproved writes 0, ~2.5 model calls and ~3.9 s per action. The miss (`vpn-slack`: asked a clarifying question instead of posting) persisted after `agent_system@v3`, then passed 3/3 when re-run alone: temperature 0.7 makes agent decisions vary. Next fix: a lower temperature for the agent only (Phase 4 exercise 2).
+
+## 2026-10-31 · Phase 5 part A: the agent team + animated graph
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Four agents behind the `Agent` interface: Planner (plans, then writes the answer), Researcher (read tools only), Action (writes + org chart), Verifier (checks the draft); `agents/team.py` | Narrow prompts and toolsets per role; each is testable and evaluable alone | One agent with all tools (Phase 4, still available: `mode: single` in `config/agent.yaml`) |
+| Supervisor pattern: the Planner's plan is made once, a `dispatch` node hands each step to a specialist; specialists never call each other | Predictable, bounded order of work that is easy to show in the UI | Handoff/swarm pattern (agents pass control directly: flexible, harder to bound and follow) |
+| Per-specialist scratchpad: append-only `work` + `work_start` index | A specialist sees only its own task (+ earlier findings as notes), not other agents' tool chatter | Shared message list (prompts grow, roles blur) |
+| Shared node builders (`agents/nodes.py`) for tools / approval / act, used by both graphs | One implementation of the approval safety rule | Copy the nodes into the team graph |
+| Verifier runs on every action request; may send the draft back once; the final answer is delivered after one revision either way | "Checks its own work" for the demo; bounded cost (user chose "always") | Verify only when sources were used; unlimited revision loops |
+| Specialists capped at 3 model calls per step (`MAX_TURNS_PER_STEP`) + team budget 14 | Agent eval showed a researcher searching 7 times for a fact no document has | Only the global budget (one bad step starves the rest) |
+| Prompt fixes from evidence: `team_planner@v2`, `team_researcher@v2`, `team_action@v2` (shared facts: Jira projects IT/HR/FIN/SEC, channels from the org chart), `team_verifier@v2` (judge against the user's request, not everything a policy suggests), `memory_extract@v2` (no one-off events or trivia) | Each fix is tied to an observed failure (live run or eval) | Bigger model; few-shot examples everywhere |
+| Animated agent graph (React Flow) in the Activity panel, derived from the saved timeline (`lib/agent-graph.ts`) | Handoffs visible live and in reopened chats, from one source of truth | A separate events stream for the graph |
+
+**Agent evals, single vs team** (gpt-oss-120b, 12 tasks): routing 100% / 100%; action accuracy 88% / 88% (team was 25% before the prompt v2s and the step cap); unapproved writes 0 / 0; model calls 2.5 / 6.1; latency 4.4 s / 10.0 s. Same accuracy at ~2.5x cost: the team buys verification and visible handoffs, not accuracy, on these tasks. `vpn-slack` fails in both modes (the model asks for details it was given): a model behaviour to fix with a lower temperature (Phase 4 exercise 2).

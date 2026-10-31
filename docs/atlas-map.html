@@ -182,8 +182,8 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 <div class="wrap">
   <header class="head">
     <div class="fix">
-      <span>Position: <b>Phase 4 built: agent, approvals, memory, activity panel</b></span>
-      <span>Next: <b>Phase 5: multi-agent team + MCP (two parts)</b></span>
+      <span>Position: <b>Phase 5A built: 4-agent team, animated agent graph</b></span>
+      <span>Next: <b>Phase 5B: MCP (Jira/Slack servers, Atlas as an MCP server)</b></span>
       <span>Updated <b>2026-10-31</b></span>
     </div>
     <h1>Atlas Map</h1>
@@ -267,8 +267,8 @@ const NODES = {
   service:  { layer: "Service", name: "Chat service", file: "backend/services/chat_service.py", status: "built",
               what: "Runs one chat turn: save question, retrieve sources, render the grounded prompt, stream from the gateway, emit citations, save answer, send done.",
               concept: "<strong>No HTTP inside.</strong> The eval runner reuses this exact code, so evals test what users get." },
-  agent:    { layer: "Service", name: "Agent (LangGraph)", file: "backend/agents/ + tools/ + config/agent.yaml", status: "built",
-              what: "For action requests: a loop of think → use tools → think. Read tools (search, org chart, calculator) run at once; write tools (Jira ticket, Slack post) pause for your approval.",
+  agent:    { layer: "Service", name: "Agent team (LangGraph)", file: "backend/agents/ (team.py, team_agents.py) + tools/", status: "built",
+              what: "For action requests: the Planner splits the work, the Researcher reads (search, org chart), the Action agent writes (Jira, Slack) after your approval, the Verifier checks the answer. Handoffs animate in the Activity panel.",
               concept: "<strong>Human in the loop.</strong> The graph pauses (interrupt), its state is saved in Postgres, and your Approve click resumes it. Nothing is written before you say yes." },
   memory:   { layer: "Service", name: "Memory", file: "backend/services/memory.py + config/memory.yaml", status: "built",
               what: "Long-term: facts about you, extracted in the background, embedded, recalled into prompts (see and delete them in Settings). Short-term: older messages folded into a running summary.",
@@ -391,14 +391,16 @@ const CHECKPOINTS = [
   { name: "Phase 3 · evals", status: "built", items: ["50 questions, LLM judge, CI retrieval gate", "Embedding map, Analytics; quiz + exercises pending"] },
   { name: "Phase 4 · part A", status: "built", items: ["LangGraph agent, 5 tools, approval cards", "Simulated Jira/Slack + Outbox page"] },
   { name: "Phase 4 · part B", status: "built", items: ["Short- and long-term memory, Settings list", "Activity panel; agent evals: routing 100%, actions 88%, 0 unapproved writes"] },
+  { name: "Phase 5 · part A", status: "built", items: ["Planner, Researcher, Action, Verifier", "Animated agent graph; team 88% at 2.5x calls"] },
+  { name: "Phase 5 · part B", status: "next", items: ["Jira + Slack as MCP servers", "Atlas as an MCP server (Claude Desktop)"] },
 ];
 
 const PHASES = [
   { no: 1, name: "Foundation", what: "App shell, streaming chat, gateway, tracing, eval scaffold." },
   { no: 2, name: "Core RAG", what: "Load the handbook and Acme docs, embeddings, pgvector, citation chips.", demo: "Demo 1" },
   { no: 3, name: "Advanced RAG + evals", what: "Hybrid search, reranker, query rewriting, GraphRAG, evals in CI." },
-  { no: 4, name: "Agents + tools", what: "LangGraph agent, tools, approval cards, memory.", now: true },
-  { no: 5, name: "Multi-agent + MCP", what: "Planner, Researcher, Action and Verifier; Jira and Slack via MCP.", demo: "Demo 2" },
+  { no: 4, name: "Agents + tools", what: "LangGraph agent, tools, approval cards, memory." },
+  { no: 5, name: "Multi-agent + MCP", what: "Planner, Researcher, Action and Verifier; Jira and Slack via MCP.", demo: "Demo 2", now: true },
   { no: 6, name: "Multimodal + voice", what: "Questions about images and scanned PDFs; speak and listen." },
   { no: 7, name: "Production-ready", what: "Guardrails, caching, model routing, login, cost dashboard, deploy." },
   { no: 8, name: "Fine-tune + launch", what: "Local Ollama, a small LoRA fine-tune, demo video, README.", demo: "Final demo" },

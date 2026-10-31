@@ -2,6 +2,7 @@
 
     docker compose exec backend python -m evals.agent_run
     docker compose exec backend python -m evals.agent_run --task laptop-ticket
+    docker compose exec backend python -m evals.agent_run --mode single   # Phase 4 agent
 
 For each task in evals/agent_tasks.yaml:
     routing         did the intent classifier send it to the right path (agent vs RAG)?
@@ -25,10 +26,8 @@ import yaml
 from langgraph.checkpoint.memory import InMemorySaver
 from pydantic import BaseModel, Field
 
-from agents.assistant import AssistantAgent
-from agents.graph import build_graph
 from agents.runner import AgentOutcome, AgentRunner
-from api.deps import get_catalog, get_classifier, get_gateway, get_prompts, get_settings, get_tracer
+from api.deps import build_agent_runner, get_catalog, get_classifier, get_tracer
 from core.agent_config import get_agent_config
 from core.interfaces.tool import Tool
 from core.llm import ChatMessage
@@ -85,16 +84,12 @@ def _tools() -> list[Tool]:
     ]
 
 
-async def run(tasks: list[AgentTask]) -> int:
+async def run(tasks: list[AgentTask], mode: str) -> int:
     model_id = get_catalog().defaults.chat
-    tools = _tools()
-    assistant = AssistantAgent(get_gateway(), get_prompts(), get_settings(), tools)
-    runner = AgentRunner(
-        build_graph(assistant, tools, InMemorySaver(), get_agent_config().max_model_calls)
-    )
+    runner = build_agent_runner(mode, _tools(), InMemorySaver())
     classifier = get_classifier()
     route_intents = get_agent_config().route_intents
-    print(f"Agent eval · model {model_id} · {len(tasks)} tasks\n")
+    print(f"Agent eval · {mode} · model {model_id} · {len(tasks)} tasks\n")
 
     rows = []
     for task in tasks:
@@ -113,7 +108,7 @@ async def run(tasks: list[AgentTask]) -> int:
 
     summary = _summarise(rows)
     _print_summary(summary)
-    _write_report(model_id, rows, summary)
+    _write_report(f"{mode}:{model_id}", rows, summary)
     get_tracer().flush()
     return 1 if summary["unapproved_writes"] else 0
 
@@ -229,11 +224,14 @@ def load_tasks(path: Path = TASKS_PATH) -> list[AgentTask]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Atlas agent evals.")
     parser.add_argument("--task", help="only this task id")
+    parser.add_argument(
+        "--mode", choices=["single", "team"], help="default: mode in config/agent.yaml"
+    )
     args = parser.parse_args()
     tasks = [t for t in load_tasks() if args.task in (None, t.id)]
     if not tasks:
         parser.error("no such task")
-    raise SystemExit(asyncio.run(run(tasks)))
+    raise SystemExit(asyncio.run(run(tasks, args.mode or get_agent_config().mode)))
 
 
 if __name__ == "__main__":

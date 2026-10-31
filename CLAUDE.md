@@ -80,6 +80,7 @@ docker compose exec backend python -m evals.run --retrieval-only --retriever all
 docker compose exec backend python -m evals.run --retriever vector --no-rewrite    # full run with Phase 2 settings
 docker compose exec backend python -m evals.run --no-judge  # skip the LLM-as-judge scores
 docker compose exec backend python -m evals.agent_run       # agent evals: routing, actions, approval gate
+docker compose exec backend python -m evals.agent_run --mode single   # compare with the Phase 4 single agent
 docker compose exec backend python -m scripts.smoke_llm     # one streamed reply per model
 docker compose exec backend python -m ingestion.run          # load data/ into the knowledge base (skips unchanged)
 docker compose exec backend python -m ingestion.run --force  # re-embed all (after changing config/rag.yaml)
@@ -108,7 +109,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | Built (checkpoints A–C, cited correct 90%); walkthrough written; quiz + exercises pending |
 | 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Built in one shot at my request (2026-10-30); walkthrough written; quiz + exercises pending (Phase 2's too) |
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Built (2026-10-31; agent evals: routing 100%, actions 88%, unapproved writes 0); walkthrough + demo script written; quiz + exercises pending |
-| 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Not started |
+| 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Part A built (4-agent team, animated graph; team 88% = single 88% at 2.5x calls); part B next (MCP) |
 | 6 | Multimodal + voice | Not started |
 | 7 | Production-ready (guardrails, caching, routing, auth, cost dashboard, deploy) | Not started |
 | 8 | Fine-tune + launch (Ollama, LoRA, demo video, README) | Not started |
