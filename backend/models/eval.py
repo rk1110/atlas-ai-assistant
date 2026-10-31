@@ -40,6 +40,13 @@ class EvalRun(Base):
     hit_rate: Mapped[float | None] = mapped_column(Float)  # share with a right source in top k
     mrr: Mapped[float | None] = mapped_column(Float)  # mean reciprocal rank, 0..1
     cited_correct_rate: Mapped[float | None] = mapped_column(Float)  # answer cited a right one
+    # ---- Phase 3: LLM-as-judge averages (evals/judge.py) and the settings that produced them --
+    judge_model: Mapped[str | None] = mapped_column(String(100))
+    faithfulness: Mapped[float | None] = mapped_column(Float)
+    answer_correctness: Mapped[float | None] = mapped_column(Float)
+    context_precision: Mapped[float | None] = mapped_column(Float)
+    # e.g. {"strategy": "hybrid_rerank", "reranker": "...", "query_rewriting": true}
+    config: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     results: Mapped[list["EvalResult"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", passive_deletes=True
@@ -70,5 +77,11 @@ class EvalResult(Base):
     cited_sources: Mapped[list[Any] | None] = mapped_column(JSONB)  # document ids it cited
     reciprocal_rank: Mapped[float | None] = mapped_column(Float)  # 1/rank of first right chunk
     cited_correct: Mapped[bool | None]
+    # ---- Phase 3 ----
+    search_query: Mapped[str | None] = mapped_column(Text)  # the rewrite, for follow-ups
+    faithfulness: Mapped[float | None] = mapped_column(Float)
+    answer_correctness: Mapped[float | None] = mapped_column(Float)
+    context_precision: Mapped[float | None] = mapped_column(Float)
+    judgement: Mapped[dict[str, Any] | None] = mapped_column(JSONB)  # claims + reasoning
 
     run: Mapped[EvalRun] = relationship(back_populates="results")

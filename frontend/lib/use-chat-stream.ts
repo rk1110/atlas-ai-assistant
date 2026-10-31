@@ -15,7 +15,14 @@
 import { useCallback, useRef, useState } from "react";
 
 import { BROWSER_API_URL } from "@/lib/api";
-import { type CitationEvent, type ErrorEvent, parseStreamEvent, type StreamEvent, type Usage } from "@/lib/events";
+import {
+  type AgentStepEvent,
+  type CitationEvent,
+  type ErrorEvent,
+  parseStreamEvent,
+  type StreamEvent,
+  type Usage,
+} from "@/lib/events";
 
 export type MessageStatus = "streaming" | "done" | "error" | "stopped";
 
@@ -27,6 +34,8 @@ export interface ChatMessage {
   error: ErrorEvent | null;
   /** Sources the answer cited; they arrive after the last token. */
   citations: CitationEvent[];
+  /** Steps taken before answering, e.g. "Searched for: <rewritten question>" (Phase 3). */
+  steps: AgentStepEvent[];
   usage: Usage | null;
   traceUrl: string | null;
   modelId: string | null;
@@ -96,6 +105,8 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
             updateMessage(assistantId, (m) => ({ ...m, citations: [...m.citations, event] }));
             break;
           case "agent_step":
+            updateMessage(assistantId, (m) => ({ ...m, steps: [...m.steps, event] }));
+            break;
           case "tool_call":
           case "approval_request":
             break; // Phase 4+ events: the UI for these arrives with those phases.
@@ -176,6 +187,7 @@ function blank(id: string, role: ChatMessage["role"], modelId: string | null): C
     status: "streaming",
     error: null,
     citations: [],
+    steps: [],
     usage: null,
     traceUrl: null,
     modelId,

@@ -1,0 +1,50 @@
+# Knowledge-graph extraction (GraphRAG, Phase 3). Used by backend/graph/extract.py.
+# The JSON shape (entity and relation types) comes from the Pydantic schema in graph/schema.py.
+
+name: graph_extract
+description: Extract people, teams, policies, systems and their relations from one document.
+active: v1
+
+versions:
+  v1:
+    created: 2026-10-30
+    notes: Phase 3 baseline, tuned on the Acme corpus (org chart + policies).
+    variables: [title, document]
+    template: |
+      You build a company knowledge graph. Read the document and extract the entities and the relations between them.
+
+      Entities:
+      - Person: a named individual. description = their job title, e.g. "Finance Manager".
+      - Team: a team or department. Always name teams "<Name> Team", e.g. "Finance Team", "People Team", "IT Team".
+      - Policy: a named policy or guide. Use its title, e.g. "Expense Policy", "Time Off Policy".
+        The document itself is a Policy entity named after its title if it is a policy or guide.
+      - System: a tool or service, e.g. "IT service portal", "expense tool", "VPN".
+      - Channel: a Slack channel or email address, named exactly, e.g. "#ask-finance", "security@acme.example".
+      - Office: an office location, e.g. "Rotterdam office".
+      - Company: the company itself, "Acme Corp".
+
+      Relations (direction matters: source -> target):
+      - LEADS: Person -> Team they lead.
+      - REPORTS_TO: Person -> Person they report to.
+      - MEMBER_OF: Person -> Team.
+      - PART_OF: Team -> Company; Office -> Company.
+      - OWNS: Team -> Policy or System it owns or runs. The document's "owner" in its header counts.
+      - APPROVES: Person or Team -> Policy, when the policy says they approve something under it.
+      - HANDLES: Team -> Channel or System where the team takes requests.
+      - CONTACT_FOR: Person, Team or Channel -> Policy or System, when the text says to ask/contact them about it.
+      - USES: Policy -> System it tells people to use.
+      - REFERENCES: Policy -> another Policy it mentions.
+      - LOCATED_IN: Person or Team -> Office.
+
+      Rules:
+      - Use the same canonical name for the same thing every time. Every relation's source and target
+        must be the exact name of an entity in your entities list.
+      - Only extract what the document states. Do not infer facts that aren't written.
+      - evidence = the short sentence or table row from the document that states the relation.
+      - Skip generic roles without a name ("your manager") as entities.
+
+      Document title: $title
+
+      <document>
+      $document
+      </document>

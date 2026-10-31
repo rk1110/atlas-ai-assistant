@@ -65,7 +65,7 @@ Pin exact versions of all dependencies. Before adding any new library, tell me w
 ## Common commands (keep this section updated)
 
 ```bash
-docker compose up -d                       # start the full stack (8 services); `docker compose ps` = health
+docker compose up -d                       # start the full stack (9 services); `docker compose ps` = health
 docker compose logs -f backend             # follow backend logs
 docker compose restart backend             # after editing config/models.yaml or prompts/*.yaml
 docker compose up -d --build backend       # after changing backend dependencies (pyproject/uv.lock)
@@ -76,9 +76,13 @@ cd backend && uv run ruff check . && uv run ruff format .   # lint + format
 docker compose exec backend python -m evals.run             # eval suite (real model calls)
 docker compose exec backend python -m evals.run --model gpt-oss-20b-cloud --notes "what changed"
 docker compose exec backend python -m evals.run --retrieval-only   # hit rate + MRR only, no model calls (free)
+docker compose exec backend python -m evals.run --retrieval-only --retriever all   # compare retrieval strategies
+docker compose exec backend python -m evals.run --retriever vector --no-rewrite    # full run with Phase 2 settings
+docker compose exec backend python -m evals.run --no-judge  # skip the LLM-as-judge scores
 docker compose exec backend python -m scripts.smoke_llm     # one streamed reply per model
 docker compose exec backend python -m ingestion.run          # load data/ into the knowledge base (skips unchanged)
 docker compose exec backend python -m ingestion.run --force  # re-embed all (after changing config/rag.yaml)
+docker compose exec backend python -m graph.build            # extract Acme docs into Neo4j (skips unchanged; --force)
 cd backend && uv run python -m scripts.fetch_gitlab_handbook # refresh data/gitlab at the pinned commit
 
 docker compose exec backend alembic revision --autogenerate --rev-id 000N -m "what"  # new migration (review it!)
@@ -90,9 +94,10 @@ cd frontend && npm run dev                                  # frontend outside D
 
 | URL | What |
 | --- | --- |
-| http://localhost:3000 | Atlas web app (Knowledge Base: /knowledge) |
+| http://localhost:3000 | Atlas web app (/knowledge, /graph, /analytics) |
 | http://localhost:8000/docs | Backend API docs |
 | http://localhost:3001 | Langfuse (traces; login from `.env`) |
+| http://localhost:7474 | Neo4j browser (user `neo4j`, password `NEO4J_PASSWORD` from `.env`) |
 
 ## Phase status (update when a phase is done)
 
@@ -100,7 +105,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | --- | --- | --- |
 | 1 | Foundation (app shell, streaming chat, gateway, tracing, eval scaffold) | Done (2026-10-29; exercise 3 solved by Claude at my request) |
 | 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | Built (checkpoints A–C, cited correct 90%); walkthrough written; quiz + exercises pending |
-| 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Not started |
+| 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Built in one shot at my request (2026-10-30); walkthrough written; quiz + exercises pending (Phase 2's too) |
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Not started |
 | 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Not started |
 | 6 | Multimodal + voice | Not started |

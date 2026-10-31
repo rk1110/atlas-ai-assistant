@@ -31,8 +31,34 @@ class ChunkingConfig(BaseModel):
         return self
 
 
+RetrievalStrategy = Literal["vector", "keyword", "hybrid", "hybrid_rerank", "hybrid_graph", "graph"]
+
+
 class RetrievalConfig(BaseModel):
     top_k: int = Field(default=5, gt=0)
+    strategy: RetrievalStrategy = "vector"
+    candidates: int = Field(default=20, gt=0)  # first-stage depth for hybrid and reranking
+    rrf_k: int = Field(default=60, gt=0)
+
+
+class RerankerConfig(BaseModel):
+    model: str = "BAAI/bge-reranker-base"
+    candidates: int = Field(default=10, gt=0)  # first-stage results re-scored
+    batch_size: int = Field(default=16, gt=0)
+    max_length: int = Field(default=512, gt=0)  # longer (question + chunk) pairs are cut off
+
+
+class GraphConfig(BaseModel):
+    sources: list[str] = Field(default_factory=list)  # DataSource names extracted into Neo4j
+    extraction_model: str | None = None  # None = the catalog's chat model
+    hops: int = Field(default=2, ge=1, le=3)
+    max_facts: int = Field(default=20, gt=0)
+
+
+class QueryRewritingConfig(BaseModel):
+    enabled: bool = True
+    # A model id from config/models.yaml; None = the catalog's cheap model.
+    model: str | None = None
 
 
 class SourceConfig(BaseModel):
@@ -54,6 +80,9 @@ class RagConfig(BaseModel):
     embedding: EmbeddingConfig
     chunking: ChunkingConfig
     retrieval: RetrievalConfig = RetrievalConfig()
+    reranker: RerankerConfig = RerankerConfig()
+    query_rewriting: QueryRewritingConfig = QueryRewritingConfig()
+    graph: GraphConfig = GraphConfig()
     sources: list[SourceConfig] = Field(default_factory=list)
     uploads: UploadsConfig = UploadsConfig()
 

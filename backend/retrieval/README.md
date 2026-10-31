@@ -1,9 +1,18 @@
 # retrieval/ (Phase 2–3)
 
 `Retriever` implementations: `retrieve(query, filters, top_k) -> list[Chunk]`, best first.
+The chat uses `retrieval.strategy` from `config/rag.yaml` (today: `hybrid_graph`).
 
-- `vector.py`: `VectorRetriever`, embedding similarity in pgvector (Phase 2).
-- `__init__.py`: `get_retriever()`, the one the chat uses.
+| File | Strategy | Finds by |
+| --- | --- | --- |
+| `vector.py` | `vector` | meaning: embedding similarity in pgvector |
+| `keyword.py` | `keyword` | words: Postgres full-text candidates, ranked with BM25 |
+| `hybrid.py` | `hybrid`, `hybrid_graph` | several retrievers fused with Reciprocal Rank Fusion |
+| `reranking.py` | `hybrid_rerank` | a cross-encoder (`core/reranker.py`) re-orders the top 10 |
+| `graph.py` | `graph` | facts within 2 hops of the entities a question names (Neo4j, `graph/`) |
+| `__init__.py` | | `build_retriever(strategy)` and `get_retriever()` |
 
-Phase 3 adds keyword (Postgres full-text), hybrid (fusion), cross-encoder reranker, query rewriting
-and a graph retriever (Neo4j). Measure any change with `python -m evals.run --retrieval-only`.
+Query rewriting (follow-ups → standalone questions) happens before retrieval, in
+`services/query_rewriter.py`.
+
+Compare strategies for free: `python -m evals.run --retrieval-only --retriever all`.

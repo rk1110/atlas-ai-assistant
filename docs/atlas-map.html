@@ -182,9 +182,9 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 <div class="wrap">
   <header class="head">
     <div class="fix">
-      <span>Position: <b>Phase 2 built: RAG, citations, Knowledge Base page</b></span>
-      <span>Next: <b>Phase 2 quiz + your 3 exercises, then Phase 3</b></span>
-      <span>Updated <b>2026-10-30</b></span>
+      <span>Position: <b>Phase 3 built: hybrid search, GraphRAG, LLM judge, CI</b></span>
+      <span>Next: <b>Quiz + exercises for Phases 2–3, then Phase 4 (agents)</b></span>
+      <span>Updated <b>2026-10-31</b></span>
     </div>
     <h1>Atlas Map</h1>
     <p class="lede">Press play to follow one chat message through the code, from the Enter key to the last token. Click any box to see what it does and which file it lives in.</p>
@@ -246,8 +246,11 @@ const NODES = {
               what: "Turns each [1] in an answer into a small clickable chip, plus a Sources row. Clicking shows the exact passage, its heading and a link to the page.",
               concept: "<strong>Verifiable answers.</strong> Users can check a claim against the source instead of trusting the model." },
   kbpage:   { layer: "Browser", name: "Knowledge Base page", file: "frontend/app/knowledge/ + components/knowledge/", status: "built",
-              what: "Upload documents (202 + background ingestion), watch status change from Queued to Ready, test retrieval with scores, and read every chunk of any document.",
+              what: "Upload documents, test retrieval with any strategy, Compare five strategies side by side, and see every chunk on a t-SNE embedding map.",
               concept: "<strong>Background jobs.</strong> Ingestion takes seconds to minutes, so the page polls a status instead of waiting." },
+  graphui:  { layer: "Browser", name: "Graph + Analytics pages", file: "frontend/app/graph/ + app/analytics/", status: "built",
+              what: "Knowledge Graph explorer (React Flow): ask a question and the facts graph search would use light up. Analytics: eval scores over time and chat usage.",
+              concept: "<strong>Show the work.</strong> A two-hop answer is easier to trust when you can see the path: Expense Policy ← owns ← Finance Team ← leads ← Elena Petrova." },
   eventsts: { layer: "Browser", name: "Event types", file: "frontend/lib/events.ts", status: "built",
               what: "TypeScript copy of the seven event shapes, so the UI knows exactly what each `type` carries.",
               concept: "<strong>Contract mirror.</strong> Must match core/events.py exactly. A test will keep them in sync." },
@@ -264,9 +267,12 @@ const NODES = {
   service:  { layer: "Service", name: "Chat service", file: "backend/services/chat_service.py", status: "built",
               what: "Runs one chat turn: save question, retrieve sources, render the grounded prompt, stream from the gateway, emit citations, save answer, send done.",
               concept: "<strong>No HTTP inside.</strong> The eval runner reuses this exact code, so evals test what users get." },
-  retriever:{ layer: "Service", name: "Vector retriever", file: "backend/retrieval/vector.py", status: "built",
-              what: "Embeds the question and asks pgvector for the 5 nearest chunks, best first, with a similarity score.",
-              concept: "<strong>Retrieval (the R in RAG).</strong> Find relevant passages first, then let the model answer from them. Hit rate 95%, MRR 0.82 on 20 questions." },
+  rewriter: { layer: "Service", name: "Query rewriter", file: "backend/services/query_rewriter.py + prompts/query_rewrite.yaml", status: "built",
+              what: "For follow-ups only, the cheap model turns 'who do I ask about it?' into 'Who do I ask about parental leave?' before searching.",
+              concept: "<strong>Query rewriting.</strong> Search only sees the words it's given. Follow-up correctness went from 42% to 83%." },
+  retriever:{ layer: "Service", name: "Hybrid retriever", file: "backend/retrieval/ (vector, keyword, hybrid, graph, reranking)", status: "built",
+              what: "Runs vector search (meaning), BM25 keyword search (exact words) and graph search (Neo4j facts) at once, then fuses the three rankings.",
+              concept: "<strong>Reciprocal Rank Fusion.</strong> Merge by position, not score, because the scores aren't comparable. Hit rate 89% → 96%, MRR 0.81 → 0.87 on 50 questions." },
   grounding:{ layer: "Service", name: "Grounding", file: "backend/services/grounding.py", status: "built",
               what: "Numbers the retrieved chunks as [1]..[5] in the prompt, then finds which numbers the answer used and turns them into citation events.",
               concept: "<strong>Grounding + citations.</strong> The model may only use the given sources and must say which one each fact came from." },
@@ -307,10 +313,13 @@ const NODES = {
               what: "Offline, zero-cost models running on your own machine.", concept: "<strong>Self-hosting.</strong> Arrives in Phase 8 with fine-tuning." },
   postgres: { layer: "Data", name: "Postgres + pgvector", file: "backend/models/ + migrations/0001", status: "built",
               what: "Conversations and messages (now with their citations), eval results, and the knowledge base: documents plus 854 chunks with vector(384) embeddings.",
-              concept: "<strong>HNSW index.</strong> A graph of nearby vectors, so search checks a few rows instead of all. Migrations 0001-0004." },
+              concept: "<strong>HNSW + GIN indexes.</strong> HNSW finds nearby vectors; GIN maps each word to the chunks containing it (keyword search). Migrations 0001-0006." },
   langfuse: { layer: "Data", name: "Langfuse", file: "localhost:3001", status: "built",
               what: "Receives one trace per chat turn. Sessions view groups a whole conversation; each model call shows tokens, cost and timing.",
               concept: "<strong>Traces.</strong> A timeline of everything one request did, with timings and costs." },
+  neo4j:    { layer: "Data", name: "Neo4j graph", file: "backend/graph/ (python -m graph.build) · localhost:7474", status: "built",
+              what: "71 entities and 134 relations an LLM extracted from the Acme docs: who leads which team, which team owns which policy. Each relation keeps its source sentence.",
+              concept: "<strong>GraphRAG.</strong> Multi-hop questions become a lookup: walk two links instead of hoping one passage holds both facts." },
   redis:    { layer: "Data", name: "Redis", file: "cache + job queue", status: "later",
               what: "Used by Langfuse today. Atlas uses it for ingestion jobs (Phase 2) and semantic caching (Phase 7).",
               concept: "<strong>Cache.</strong> Answer repeated questions without paying for another model call." },
@@ -326,11 +335,16 @@ const STEPS = [
     text: "It opens its own database session inside the stream, because the stream outlives the route function." },
   { node: "postgres", title: "Your question is saved first",
     text: "Committed before any model call, so the question survives even if the model fails. Then the last 20 messages are loaded as history." },
+  { node: "rewriter", title: "A follow-up is rewritten",
+    text: "Only if the chat has earlier turns: the cheap model makes the question standalone. The UI shows it as 'Searched for: …'.",
+    wire: 'who do I ask about it?\n  → Who do I ask about parental leave?' },
   { node: "embedder", title: "The question becomes a vector",
     text: "The BGE model turns the question (with its search prefix) into 384 numbers. It runs on CPU in a worker thread, so other chats keep streaming." },
-  { node: "retriever", title: "pgvector finds the 5 nearest chunks",
-    text: "One SQL query: ORDER BY embedding <=> question LIMIT 5, served by the HNSW index. Recorded as a 'retrieve' step in Langfuse with every score.",
+  { node: "retriever", title: "Three searches, one ranking",
+    text: "Vector (pgvector), keyword (BM25) and graph (Neo4j) run together; Reciprocal Rank Fusion keeps the best 5. Recorded as a 'retrieve' step in Langfuse.",
     wire: '1. Parental Leave > How much leave you get  0.91\n2. Parental Leave > Taking your leave       0.83\n3. Parental Leave (intro)                    0.78\n4. Working Hours > Standard working time    0.77 …' },
+  { node: "neo4j", title: "The graph adds facts",
+    text: "If the question names an entity (e.g. 'Expense Policy'), graph search walks up to two links and returns the facts, grouped by the document that states them, so they can be cited." },
   { node: "grounding", title: "Chunks become numbered sources",
     text: "Each chunk is labelled [1] to [5] with its title and heading." },
   { node: "prompts", title: "The grounded prompt is rendered",
@@ -365,15 +379,16 @@ const STEPS = [
 
 const CHECKPOINTS = [
   { name: "Phase 1", status: "built", items: ["Streaming chat, gateway, tracing", "Eval scaffold, quiz, exercises"] },
-  { name: "Checkpoint A", status: "built", items: ["Corpus: 35 GitLab + 12 Acme docs", "Chunker, BGE embeddings, pgvector HNSW"] },
-  { name: "Checkpoint B", status: "built", items: ["Vector retriever, prompt v3, citation chips", "Evals: hit rate 95%, MRR 0.82, cited 90%"] },
-  { name: "Checkpoint C", status: "built", items: ["Knowledge Base page: upload, progress, retrieval tester, chunks", "Walkthrough docs/walkthroughs/phase-2.md"] },
+  { name: "Phase 2", status: "built", items: ["Ingestion, embeddings, pgvector, citations", "Knowledge Base page; quiz + exercises pending"] },
+  { name: "Phase 3 · search", status: "built", items: ["BM25 keyword + hybrid (RRF), BGE reranker (opt-in)", "Query rewriting v2: follow-ups 42% → 83%"] },
+  { name: "Phase 3 · graph", status: "built", items: ["Neo4j GraphRAG: 71 entities, 134 relations", "Graph explorer page"] },
+  { name: "Phase 3 · evals", status: "built", items: ["50 questions, LLM judge, CI retrieval gate", "Embedding map, Analytics; quiz + exercises pending"] },
 ];
 
 const PHASES = [
   { no: 1, name: "Foundation", what: "App shell, streaming chat, gateway, tracing, eval scaffold." },
-  { no: 2, name: "Core RAG", what: "Load the handbook and Acme docs, embeddings, pgvector, citation chips.", demo: "Demo 1", now: true },
-  { no: 3, name: "Advanced RAG + evals", what: "Hybrid search, reranker, query rewriting, GraphRAG, evals in CI." },
+  { no: 2, name: "Core RAG", what: "Load the handbook and Acme docs, embeddings, pgvector, citation chips.", demo: "Demo 1" },
+  { no: 3, name: "Advanced RAG + evals", what: "Hybrid search, reranker, query rewriting, GraphRAG, evals in CI.", now: true },
   { no: 4, name: "Agents + tools", what: "LangGraph agent, tools, approval cards, memory." },
   { no: 5, name: "Multi-agent + MCP", what: "Planner, Researcher, Action and Verifier; Jira and Slack via MCP.", demo: "Demo 2" },
   { no: 6, name: "Multimodal + voice", what: "Questions about images and scanned PDFs; speak and listen." },

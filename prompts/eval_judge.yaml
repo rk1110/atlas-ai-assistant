@@ -1,0 +1,45 @@
+# LLM-as-judge for the eval runner (Phase 3). Used by backend/evals/judge.py.
+# One call scores three things at once (faithfulness, correctness, context precision), to keep
+# eval cost at one cheap call per question. The JSON shape comes from the Pydantic schema.
+
+name: eval_judge
+description: Grade one RAG answer against its sources and the expected answer.
+active: v1
+
+versions:
+  v1:
+    created: 2026-10-30
+    notes: >
+      Phase 3 baseline. RAGAS-style definitions: faithfulness = share of the answer's claims
+      supported by the sources; context precision from which sources were relevant;
+      correctness against the expected answer (0 / 0.5 / 1).
+    variables: [question, expected_answer, sources, answer]
+    template: |
+      You are a strict, fair grader for a question-answering assistant that answers from numbered sources.
+
+      Question: $question
+
+      Expected answer (the facts a correct answer must contain):
+      $expected_answer
+
+      Sources the assistant was given:
+      <sources>
+      $sources
+      </sources>
+
+      Assistant's answer:
+      <answer>
+      $answer
+      </answer>
+
+      Grade it:
+      1. claims: list each factual statement the answer makes about the company or the question's topic
+         (skip greetings, follow-up questions and "I couldn't find it" statements). For each, set
+         supported = true only if the sources above state it or directly imply it. Judge against the
+         SOURCES, not your own knowledge.
+      2. relevant_sources: the numbers of the sources that contain information needed for the expected answer.
+      3. correctness_reasoning: one sentence comparing the answer with the expected answer.
+      4. correctness: 1 if the answer contains the expected facts and nothing contradicting them,
+         0.5 if partly right or missing an important part, 0 if wrong, missing, or a refusal when an answer existed.
+         If the expected answer says the assistant should not find the information, a clear
+         "couldn't find it" answer scores 1 and a guessed answer scores 0.

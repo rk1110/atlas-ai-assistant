@@ -17,10 +17,14 @@
 # questions to be partly right and Acme questions to fail. That baseline is the point: Phase 2
 # must beat it. Target: 20 questions in Phase 1 (5 here, 15 for you to add), 50 by Phase 3.
 #
+# Phase 3 (version 2) added 30 harder questions, tagged by category so results can be split:
+#   keyword (exact terms), follow-up (need `history`), relational (multi-hop, GraphRAG),
+#   paraphrase (different wording), unanswerable (expected_sources: [], must not guess).
+#
 # Acme Corp is fictional. Its expected answers DEFINE facts that the Acme corpus generated in
 # Phase 2 must contain, so keep them specific and consistent.
 
-version: 1
+version: 2
 
 questions:
   - id: gitlab-values
@@ -184,3 +188,297 @@ questions:
       expenses are paid with the next monthly payroll.
     expected_sources: ["acme-docs:finance/expense-policy.md"]
     tags: [acme, finance, policy]
+
+  # ---------------------------------------------------------------------------------------
+  # Phase 3 additions (version 2, 2026-10-30): 30 questions that stress the weak spots of
+  # pure vector search. Each new question carries a category tag: keyword, follow-up,
+  # relational, paraphrase or unanswerable.
+  # ---------------------------------------------------------------------------------------
+
+  # --- keyword: exact terms, acronyms, codes, emails, channel names (embeddings miss these)
+
+  - id: gitlab-dri-meaning
+    question: what does DRI mean at gitlab
+    expected_answer: >
+      Directly Responsible Individual: the person who owns a decision or piece of work. For
+      reversible (two-way door) decisions the DRI goes ahead without needing approval.
+    expected_sources:
+      - "gitlab-handbook:/handbook/values/"
+      - "gitlab-handbook:/handbook/communication/"
+    tags: [gitlab, culture, keyword]
+
+  - id: gitlab-ticker-symbol
+    question: GitLab ticker symbol?
+    expected_answer: >
+      GTLB on the Nasdaq Global Market; GitLab became a publicly traded company on
+      October 14, 2021.
+    expected_sources: ["gitlab-handbook:/handbook/company/history/"]
+    tags: [gitlab, company, keyword]
+
+  - id: gitlab-mr-slack-channel
+    question: which slack channel for merge request questions at gitlab?
+    expected_answer: "#mr-buddies is the Slack channel for any questions about merge requests."
+    expected_sources: ["gitlab-handbook:/handbook/communication/chat/"]
+    tags: [gitlab, communication, keyword]
+
+  - id: gitlab-pause-acronym
+    question: What does P.A.U.S.E stand for?
+    expected_answer: >
+      From GitLab's Power of the Pause: Practice Patience, Adjust your Attitude, Understand
+      the Situation, Step Outside, Explain Calmly.
+    expected_sources: ["gitlab-handbook:/handbook/communication/power-of-the-pause/"]
+    tags: [gitlab, communication, keyword]
+
+  - id: acme-receipts-email
+    question: acme email address to forward digital receipts
+    expected_answer: >
+      Forward digital receipts to expenses@acme.example (paper receipts: take a photo);
+      submit within 30 days of the purchase.
+    expected_sources: ["acme-docs:finance/expense-policy.md"]
+    tags: [acme, finance, keyword]
+
+  - id: acme-2fa-sms
+    question: are SMS codes ok for 2FA?
+    expected_answer: >
+      No. 2FA is required on every account that supports it, using the authenticator app or
+      a hardware key; text-message codes are not allowed.
+    expected_sources: ["acme-docs:it/accounts-and-passwords.md"]
+    tags: [acme, it, keyword]
+
+  # --- follow-up: elliptical questions that only make sense with the earlier turns
+
+  - id: acme-followup-sick-days
+    history:
+      - role: user
+        content: How long is parental leave at Acme?
+      - role: assistant
+        content: Acme offers 16 weeks of fully paid parental leave to all parents.
+    question: And how many sick days do I get?
+    expected_answer: >
+      10 paid sick days per year; a doctor's note is required after 3 consecutive sick days,
+      and unused sick days don't carry over.
+    expected_sources: ["acme-docs:hr/time-off-policy.md"]
+    tags: [acme, hr, follow-up]
+
+  - id: acme-followup-parental-contact
+    history:
+      - role: user
+        content: How long is parental leave at Acme?
+      - role: assistant
+        content: Acme offers 16 weeks of fully paid parental leave to all parents.
+    question: Who do I ask about it?
+    expected_answer: >
+      The People Team (led by Grace Liu): the #ask-people Slack channel or
+      people@acme.example. Tell your manager and the People Team at least 8 weeks before
+      the leave starts, where possible.
+    expected_sources:
+      - "acme-docs:hr/parental-leave-policy.md"
+      - "acme-docs:company/teams-and-people.md"
+    tags: [acme, hr, follow-up]
+
+  - id: acme-followup-vacation-carryover
+    history:
+      - role: user
+        content: How many vacation days do I get at Acme?
+      - role: assistant
+        content: You get 22 paid vacation days per year, on top of public holidays.
+    question: can I carry any of them over?
+    expected_answer: >
+      Yes, up to 5 unused days carry over to the next year; any days above that expire on
+      31 December.
+    expected_sources: ["acme-docs:hr/time-off-policy.md"]
+    tags: [acme, hr, follow-up]
+
+  - id: acme-followup-work-abroad
+    history:
+      - role: user
+        content: How many days can I work from home at Acme?
+      - role: assistant
+        content: Up to 3 days a week; Tuesday and Thursday are in-office days for everyone.
+    question: And from another country?
+    expected_answer: >
+      Working from abroad is limited to 20 working days per year and needs approval from
+      your manager and the People Team in advance (for tax and legal reasons).
+    expected_sources: ["acme-docs:hr/hybrid-work-policy.md"]
+    tags: [acme, hr, follow-up]
+
+  - id: acme-followup-travel-meals
+    history:
+      - role: user
+        content: How much can I spend on a client dinner at Acme?
+      - role: assistant
+        content: Up to $75 per person without approval; above that you need your manager's approval first.
+    question: what about my own meals when I'm on a business trip?
+    expected_answer: >
+      A daily meal allowance of $60 while travelling, covering your own meals only (meals
+      with clients still follow the Expense Policy).
+    expected_sources: ["acme-docs:finance/travel-policy.md"]
+    tags: [acme, finance, follow-up]
+
+  - id: gitlab-followup-countries
+    history:
+      - role: user
+        content: Does GitLab have offices?
+      - role: assistant
+        content: No, GitLab is an all-remote company with no company-owned offices.
+    question: So how many countries are its people in?
+    expected_answer: More than 65 countries around the world.
+    expected_sources:
+      - "gitlab-handbook:/handbook/company/culture/all-remote/remote-benefits/"
+      - "gitlab-handbook:/handbook/company/history/"
+    tags: [gitlab, culture, follow-up]
+
+  # --- relational: multi-hop questions about people, teams and ownership
+
+  - id: acme-expense-policy-owner-lead
+    question: Who leads the team that owns the expense policy?
+    expected_answer: >
+      Elena Petrova, Finance Manager: the Finance Team owns the Expense Policy, and she
+      reports to Sofia Reyes, the CFO.
+    expected_sources:
+      - "acme-docs:company/teams-and-people.md"
+      - "acme-docs:finance/expense-policy.md"
+    tags: [acme, company, finance, relational]
+
+  - id: acme-it-manager-reports-to
+    question: Who does the IT Manager report to?
+    expected_answer: >
+      Priya Nair, the IT Manager, reports to David Okafor, the Chief Technology Officer (CTO).
+    expected_sources: ["acme-docs:company/teams-and-people.md"]
+    tags: [acme, company, it, relational]
+
+  - id: acme-laptop-repair-channel
+    question: Which Slack channel should I use to ask about laptop repairs?
+    expected_answer: >
+      #ask-it (the IT Team, led by Priya Nair). To actually get a repair, open a ticket in
+      the IT service portal under Hardware → Laptop; IT replies within 1 working day.
+    expected_sources:
+      - "acme-docs:company/teams-and-people.md"
+      - "acme-docs:it/hardware-policy.md"
+    tags: [acme, company, it, relational]
+
+  - id: acme-design-skip-level
+    question: Who is the manager of the Head of Design's manager?
+    expected_answer: >
+      David Okafor, the CTO: Yuki Tanaka (Head of Design) reports to Hannah Brooks (Head of
+      Product), who reports to David Okafor.
+    expected_sources: ["acme-docs:company/teams-and-people.md"]
+    tags: [acme, company, relational]
+
+  - id: acme-lost-laptop-contacts
+    question: My laptop was stolen. Who do I need to tell?
+    expected_answer: >
+      Both IT and Security, right away. Report it to Security (led by Tom Becker) within 1
+      hour in #security-incidents or at security@acme.example; IT (led by Priya Nair) is
+      reachable in #ask-it.
+    expected_sources:
+      - "acme-docs:it/hardware-policy.md"
+      - "acme-docs:security/incident-reporting.md"
+      - "acme-docs:company/teams-and-people.md"
+    tags: [acme, it, security, relational]
+
+  - id: acme-late-expense-approver
+    question: I forgot to submit a receipt for 6 weeks. Whose approval do I need now?
+    expected_answer: >
+      Claims after 30 days are only paid with approval from Finance, i.e. Elena Petrova's
+      Finance Team (#ask-finance).
+    expected_sources:
+      - "acme-docs:company/teams-and-people.md"
+      - "acme-docs:finance/expense-policy.md"
+    tags: [acme, finance, relational]
+
+  - id: acme-parental-policy-executive
+    question: Which executive is ultimately responsible for the parental leave policy?
+    expected_answer: >
+      Arjun Mehta, the Chief People Officer: the People Team owns the Parental Leave Policy,
+      and its lead Grace Liu (Head of People) reports to him.
+    expected_sources:
+      - "acme-docs:company/teams-and-people.md"
+      - "acme-docs:hr/parental-leave-policy.md"
+    tags: [acme, hr, company, relational]
+
+  - id: acme-cto-direct-reports
+    question: Which team leads report directly to the CTO?
+    expected_answer: >
+      Four leads report to David Okafor (CTO): Lars de Vries (Head of Engineering), Hannah
+      Brooks (Head of Product), Priya Nair (IT Manager) and Tom Becker (Security Lead).
+    expected_sources: ["acme-docs:company/teams-and-people.md"]
+    tags: [acme, company, relational]
+
+  # --- paraphrase: answerable, but worded very differently from the source
+
+  - id: acme-return-from-leave-schedule
+    question: Do I have to go straight back to full-time after my baby leave?
+    expected_answer: >
+      No: for the first 4 weeks back you can work a reduced schedule of 4 days a week at full
+      pay, agreed with your manager before you return.
+    expected_sources: ["acme-docs:hr/parental-leave-policy.md"]
+    tags: [acme, hr, paraphrase]
+
+  - id: acme-home-desk-chair
+    question: will the company chip in for a proper chair for my home setup?
+    expected_answer: >
+      Yes: a one-time home-office allowance of $500 for a chair, desk or monitor, claimed
+      through the expense tool.
+    expected_sources:
+      - "acme-docs:hr/hybrid-work-policy.md"
+      - "acme-docs:finance/expense-policy.md"
+    tags: [acme, hr, paraphrase]
+
+  - id: acme-overtime-comp
+    question: I stayed late loads last week, do I get anything back for that?
+    expected_answer: >
+      Only if the overtime was agreed with your manager in advance; approved overtime is
+      compensated with time off in lieu, one hour off per hour worked, taken within 3 months.
+    expected_sources: ["acme-docs:hr/working-hours-policy.md"]
+    tags: [acme, hr, paraphrase]
+
+  - id: acme-bereavement-leave
+    question: My dad passed away. How much time off can I take?
+    expected_answer: Up to 5 paid days of bereavement leave for the loss of a close family member.
+    expected_sources: ["acme-docs:hr/time-off-policy.md"]
+    tags: [acme, hr, paraphrase]
+
+  - id: gitlab-short-toes
+    question: Is it rude to suggest changes to stuff another team owns at GitLab?
+    expected_answer: >
+      No: GitLab asks for "short toes", being accepting of people taking initiative and
+      comfortable letting others contribute to your domain, so decisions stay fast as the
+      company grows.
+    expected_sources: ["gitlab-handbook:/handbook/values/"]
+    tags: [gitlab, culture, paraphrase]
+
+  - id: gitlab-reversible-decisions
+    question: Do I need sign-off at GitLab before making a call that's easy to undo?
+    expected_answer: >
+      No: these are two-way door decisions; the DRI should go ahead and make them without
+      approval. Only decisions that can't be reversed need a more thorough discussion.
+    expected_sources: ["gitlab-handbook:/handbook/values/"]
+    tags: [gitlab, culture, paraphrase]
+
+  # --- unanswerable: plausible, but the knowledge base does not contain the answer
+  # (checked with grep on 2026-10-30: no matches in data/ for these topics)
+
+  - id: acme-pet-insurance
+    question: Does Acme offer pet insurance?
+    expected_answer: "Says it couldn't find this in the knowledge base (does not guess)."
+    expected_sources: []
+    tags: [acme, hr, unanswerable]
+
+  - id: acme-stock-price
+    question: What's Acme's current stock price?
+    expected_answer: "Says it couldn't find this in the knowledge base (does not guess)."
+    expected_sources: []
+    tags: [acme, company, unanswerable]
+
+  - id: acme-company-car
+    question: Can I get a lease car through Acme?
+    expected_answer: "Says it couldn't find this in the knowledge base (does not guess)."
+    expected_sources: []
+    tags: [acme, hr, unanswerable]
+
+  - id: rotterdam-weather
+    question: What's the weather in Rotterdam today?
+    expected_answer: "Says it couldn't find this in the knowledge base (does not guess)."
+    expected_sources: []
+    tags: [acme, unanswerable]

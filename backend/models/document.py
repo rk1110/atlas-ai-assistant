@@ -14,8 +14,17 @@ from datetime import datetime
 from typing import Any
 
 from pgvector.sqlalchemy import Vector
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, String, Text, func
-from sqlalchemy.dialects.postgresql import ARRAY, JSONB
+from sqlalchemy import (
+    CheckConstraint,
+    ColumnElement,
+    DateTime,
+    ForeignKey,
+    Index,
+    String,
+    Text,
+    func,
+)
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, TSVECTOR
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.db import Base
@@ -24,6 +33,15 @@ from core.db import Base
 EMBEDDING_DIMENSIONS = 384
 
 DOCUMENT_STATUSES = ("pending", "processing", "ready", "failed")
+
+# Postgres' built-in English text-search setup: stems words and drops stop words. Keyword
+# search (retrieval/keyword.py) must analyse queries with the same one.
+TEXT_SEARCH_CONFIG = "english"
+
+
+def search_vector(title: str, heading: str | None, text: str) -> ColumnElement[str]:
+    """SQL expression that builds a chunk's keyword-search vector (see ChunkRecord)."""
+    return func.to_tsvector(TEXT_SEARCH_CONFIG, f"{title}\n{heading or ''}\n{text}")
 
 
 class DocumentRecord(Base):
@@ -75,6 +93,9 @@ class ChunkRecord(Base):
             postgresql_using="hnsw",
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
+        # GIN: an inverted index (word -> rows containing it), the classic search-engine
+        # structure. It makes "chunks containing 'mvc' or 'gitlab'" fast. (Phase 3)
+        Index("ix_chunks_search_vector_gin", "search_vector", postgresql_using="gin"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
@@ -84,6 +105,11 @@ class ChunkRecord(Base):
     heading: Mapped[str | None] = mapped_column(Text)  # e.g. "Values > Iteration"
     token_count: Mapped[int]
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
+    # Keyword search (Phase 3): the chunk's words, lower-cased, stemmed ("changes" -> "chang")
+    # and without stop words, with their positions. Built by Postgres' to_tsvector() from the
+    # document title + heading + text, so "Expense Policy" matches a chunk that only says
+    # "meals". Set at ingestion (a generated column can't read the documents table's title).
+    search_vector: Mapped[str | None] = mapped_column(TSVECTOR)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     document: Mapped[DocumentRecord] = relationship(back_populates="chunks")

@@ -5,6 +5,7 @@ import { toast } from "sonner";
 
 import { ChunkViewer } from "@/components/knowledge/chunk-viewer";
 import { DocumentTable } from "@/components/knowledge/document-table";
+import { EmbeddingMap } from "@/components/knowledge/embedding-map";
 import { KnowledgeStats } from "@/components/knowledge/knowledge-stats";
 import { RetrievalTester } from "@/components/knowledge/retrieval-tester";
 import { UploadDropzone } from "@/components/knowledge/upload-dropzone";
@@ -35,6 +36,7 @@ export function KnowledgeView({ initialDocuments, config }: { initialDocuments: 
   const [uploading, setUploading] = useState(false);
   const [openId, setOpenId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<KnowledgeDocument | null>(null);
+  const [highlighted, setHighlighted] = useState<string[]>([]);
 
   const refresh = useCallback(async () => {
     try {
@@ -80,16 +82,20 @@ export function KnowledgeView({ initialDocuments, config }: { initialDocuments: 
   return (
     <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-6">
       <KnowledgeStats documents={documents} embeddingModel={config.embedding_model} />
-      <div className="grid gap-8 md:grid-cols-2">
-        <section className="flex flex-col gap-3">
-          <div>
-            <h2 className="text-sm font-medium">Upload</h2>
-            <p className="text-xs text-muted-foreground">Uploaded files become searchable in the chat, with citations.</p>
-          </div>
-          <UploadDropzone extensions={config.upload_extensions} maxFileMb={config.max_file_mb} uploading={uploading} onFiles={upload} />
-        </section>
-        <RetrievalTester onOpenDocument={setOpenId} />
-      </div>
+      <RetrievalTester
+        strategies={config.strategies}
+        defaultStrategy={config.default_strategy}
+        onOpenDocument={setOpenId}
+        onResults={setHighlighted}
+      />
+      <EmbeddingMap highlighted={highlighted} onOpenDocument={setOpenId} />
+      <section className="flex flex-col gap-3">
+        <div>
+          <h2 className="text-sm font-medium">Upload</h2>
+          <p className="text-xs text-muted-foreground">Uploaded files become searchable in the chat, with citations.</p>
+        </div>
+        <UploadDropzone extensions={config.upload_extensions} maxFileMb={config.max_file_mb} uploading={uploading} onFiles={upload} />
+      </section>
       <DocumentTable documents={documents} uploadSource={config.upload_source} onOpen={setOpenId} onDelete={setPendingDelete} />
       <ChunkViewer documentId={openId} onClose={() => setOpenId(null)} />
       <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => !open && setPendingDelete(null)}>

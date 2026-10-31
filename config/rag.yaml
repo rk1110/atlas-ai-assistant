@@ -26,6 +26,42 @@ chunking:
 
 retrieval:
   top_k: 5
+  # vector | keyword | hybrid | hybrid_rerank | graph | hybrid_graph  (backend/retrieval/__init__.py)
+  # Compare them for free: python -m evals.run --retrieval-only --retriever all
+  strategy: hybrid_graph
+  # How many results each first stage returns before fusing / reranking. Deeper = better
+  # recall, but the reranker's cost grows linearly with it.
+  candidates: 20
+  # Reciprocal Rank Fusion constant: 60 is the value from the original paper and the
+  # common default. Smaller = the top ranks of each list matter more.
+  rrf_k: 60
+
+reranker:
+  # A cross-encoder: reads (question, chunk) together and scores relevance.
+  # Measured 2026-10-30 (docs/decisions.md): ms-marco-MiniLM-L-6-v2 is 5x faster but LOWERED
+  # MRR on paraphrased questions; bge-reranker-base raised it, at ~1.5 s per 10 pairs on CPU.
+  model: BAAI/bge-reranker-base
+  # Only the first stage's top N are re-scored: cost grows linearly with N.
+  candidates: 10
+  batch_size: 16
+  # (question + chunk) pairs are cut at this many tokens. Most chunks are ~140 tokens.
+  max_length: 320
+
+graph:
+  # GraphRAG: which sources `python -m graph.build` extracts into Neo4j. Acme only: its org
+  # chart and policies are what relationship questions ("who leads the team that owns X?")
+  # are about.
+  sources: [acme-docs]
+  extraction_model: null  # null = the chat model in config/models.yaml (quality matters here)
+  # How far to walk from the entities a question names. 2 = "the lead of the team that owns X".
+  hops: 2
+  max_facts: 20
+
+query_rewriting:
+  # Follow-ups ("and for fathers?") are rewritten into a standalone search query by a cheap
+  # model before retrieval. Only when the conversation has earlier turns.
+  enabled: true
+  model: null  # null = the cheap model in config/models.yaml
 
 sources:
   - name: gitlab-handbook

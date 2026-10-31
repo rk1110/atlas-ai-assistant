@@ -6,6 +6,7 @@ import { AnswerMarkdown } from "@/components/chat/answer-markdown";
 import { CitationList } from "@/components/chat/citation-list";
 import { ErrorBanner } from "@/components/chat/error-banner";
 import { MessageMeta } from "@/components/chat/message-meta";
+import { MessageSteps } from "@/components/chat/message-steps";
 import type { ChatMessage } from "@/lib/use-chat-stream";
 
 /** One message. User text is shown as typed; assistant text is Markdown with source chips. */
@@ -26,6 +27,7 @@ export function MessageBubble({ message, onRetry }: { message: ChatMessage; onRe
   const waiting = message.status === "streaming" && message.content === "";
   return (
     <motion.div initial={enter} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-2">
+      <MessageSteps steps={message.steps} />
       {waiting ? (
         <ThinkingDots />
       ) : (

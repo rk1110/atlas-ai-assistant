@@ -40,13 +40,16 @@ class VectorRetriever(Retriever):
             .order_by(distance)
             .limit(top_k)
         )
-        statement = _apply_filters(statement, filters)
+        statement = apply_filters(statement, filters)
         async with self._session_factory() as session:
             rows = (await session.execute(statement)).all()
-        return [_to_chunk(chunk, document, dist) for chunk, document, dist in rows]
+        return [
+            to_chunk(chunk, document, score=round(1 - float(dist), 4))
+            for chunk, document, dist in rows
+        ]
 
 
-def _apply_filters(statement: Select, filters: RetrievalFilters | None) -> Select:
+def apply_filters(statement: Select, filters: RetrievalFilters | None) -> Select:
     """Metadata filtering: narrow the candidates with plain SQL WHERE clauses.
 
     Caveat worth knowing: with an HNSW index, Postgres walks the graph first and filters
@@ -64,7 +67,8 @@ def _apply_filters(statement: Select, filters: RetrievalFilters | None) -> Selec
     return statement
 
 
-def _to_chunk(chunk: ChunkRecord, document: DocumentRecord, distance: float) -> Chunk:
+def to_chunk(chunk: ChunkRecord, document: DocumentRecord, *, score: float) -> Chunk:
+    """Shared by every SQL-backed retriever, so all of them return identical Chunk shapes."""
     return Chunk(
         id=str(chunk.id),
         document_id=document.id,
@@ -72,5 +76,5 @@ def _to_chunk(chunk: ChunkRecord, document: DocumentRecord, distance: float) -> 
         title=document.title,
         url=document.url,
         metadata={"heading": chunk.heading, "source": document.source, "ordinal": chunk.ordinal},
-        score=round(1 - float(distance), 4),
+        score=score,
     )

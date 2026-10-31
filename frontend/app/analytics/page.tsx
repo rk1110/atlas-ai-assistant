@@ -1,24 +1,17 @@
-import { BarChart3 } from "lucide-react";
+import { connection } from "next/server";
 
+import { AnalyticsView } from "@/components/analytics/analytics-view";
 import { PageHeader } from "@/components/page-header";
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { api } from "@/lib/api";
 
-export default function AnalyticsPage() {
+/** Analytics: eval scores over time and chat usage, fetched on the server per request. */
+export default async function AnalyticsPage() {
+  await connection(); // per-request data: never prerender
+  const data = await api.analytics();
   return (
     <>
       <PageHeader title="Analytics" />
-      <PagePlaceholder
-        icon={BarChart3}
-        phase={3}
-        title="Cost, speed and answer quality"
-        summary="Every answer already records its tokens, cost and latency. This page will chart them, alongside eval scores over time."
-        features={[
-          "Cost per question and per model",
-          "Latency and time to first token",
-          "Eval scores across prompt versions",
-          "Thumbs up and down feedback (Phase 7)",
-        ]}
-      />
+      <AnalyticsView data={data} />
     </>
   );
 }

@@ -37,6 +37,10 @@ class Settings(BaseSettings):
         None  # pytest swaps this in for database_url (tests/conftest.py)
     )
     redis_url: str | None = None
+    # GraphRAG (Phase 3). No password = graph features off; the rest of the app still works.
+    neo4j_uri: str = "bolt://localhost:7687"
+    neo4j_user: str = "neo4j"
+    neo4j_password: SecretStr | None = None
 
     # --- Observability (Langfuse). Keys missing = tracing off, app still works ---
     langfuse_host: str = "http://localhost:3001"  # where the SDK sends traces
@@ -64,6 +68,7 @@ class Settings(BaseSettings):
         "ollama_api_key",
         "langfuse_public_key",
         "langfuse_secret_key",
+        "neo4j_password",
         mode="before",
     )
     @classmethod

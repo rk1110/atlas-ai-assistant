@@ -13,6 +13,7 @@ export function toChatMessage(m: StoredMessage): ChatMessage {
       ? { type: "error", code: "internal", message: "This answer was cut off by an error.", retryable: false }
       : null,
     citations: m.citations,
+    steps: [], // not stored: only shown while the answer is live
     usage:
       m.input_tokens !== null && m.output_tokens !== null && m.latency_ms !== null && m.model_id
         ? {

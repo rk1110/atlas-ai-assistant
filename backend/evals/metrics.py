@@ -29,3 +29,18 @@ def cited_correct(cited: list[str], expected: list[str]) -> bool:
 def rate(values: list[float] | list[bool]) -> float | None:
     """Average of the scored questions; None when nothing was scored (no expected_sources)."""
     return round(mean(float(v) for v in values), 4) if values else None
+
+
+def average_precision(relevant: list[bool]) -> float | None:
+    """Context precision (RAGAS): are the relevant chunks at the TOP of the retrieved list?
+
+    Mean of precision@k over the positions k that hold a relevant chunk. [yes, yes, no] -> 1.0;
+    [no, no, yes] -> 0.33. None when nothing retrieved was relevant (nothing to rank).
+    """
+    hits = 0
+    precisions: list[float] = []
+    for k, is_relevant in enumerate(relevant, start=1):
+        if is_relevant:
+            hits += 1
+            precisions.append(hits / k)
+    return round(mean(precisions), 4) if precisions else None

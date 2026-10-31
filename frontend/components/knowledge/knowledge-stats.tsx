@@ -24,7 +24,7 @@ export function KnowledgeStats({ documents, embeddingModel }: { documents: Knowl
         ))}
       </dl>
       <p className="text-xs text-muted-foreground">
-        Embedded with <code>{embeddingModel}</code>, searched with pgvector.
+        Embedded with <code>{embeddingModel}</code>. Searched by meaning (pgvector), by keyword (BM25) and through the knowledge graph (Neo4j).
       </p>
     </div>
   );

@@ -6,7 +6,8 @@ runner (step 8) can call exactly the same code the UI uses.
 Flow of `stream_reply` (RAG = steps 2-3: Retrieval-Augmented Generation):
     1. get or create the conversation, save the user's message (committed before any LLM call,
        so the question survives even if the model fails; a retry reuses the saved one)
-    2. retrieve the most relevant chunks for the question from the knowledge base
+    2. retrieve the most relevant chunks from the knowledge base; a follow-up question is
+       first rewritten into a standalone search query (Phase 3, services/query_rewriter.py)
     3. render the versioned system prompt with those chunks as numbered sources, load history
     4. stream from the LLM gateway: each text delta becomes a TokenEvent
     5. turn the answer's [n] markers into CitationEvents (only sources it actually cited)
@@ -33,6 +34,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from core.config import Settings
 from core.events import (
     RETRYABLE_CODES,
+    AgentStepEvent,
     CitationEvent,
     DoneEvent,
     ErrorEvent,
@@ -46,6 +48,7 @@ from core.prompts import PromptRegistry, RenderedPrompt
 from core.tracing import Span, Tracer
 from models import Conversation, Message
 from services.grounding import citations_for, format_sources
+from services.query_rewriter import QueryRewriter
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +74,7 @@ class AnswerResult(BaseModel):
     completion: Completion | None
     prompt_ref: str
     trace_id: str | None
+    search_query: str = ""  # what retrieval searched for (the rewrite, for follow-ups)
     chunks: list[Chunk] = Field(default_factory=list)  # what retrieval found, best first
     citations: list[CitationEvent] = Field(default_factory=list)  # what the answer cited
 
@@ -85,10 +89,12 @@ class ChatService:
         tracer: Tracer,
         retriever: Retriever,
         top_k: int,
+        query_rewriter: QueryRewriter | None = None,
     ):
         self._gateway = gateway
         self._retriever = retriever
         self._top_k = top_k
+        self._query_rewriter = query_rewriter  # None = always search with the raw question
         self._prompts = prompts
         self._settings = settings
         self._session_factory = session_factory
@@ -140,9 +146,18 @@ class ChatService:
             await session.commit()
             history = await self._load_history(session, conversation.id)
 
-        # Retrieval uses only the latest question. A follow-up like "and for fathers?" will
-        # search poorly on its own; Phase 3's query rewriting fixes that.
-        sources = await self._retrieve(request.message, trace)
+        # A follow-up like "and for fathers?" searches poorly on its own: rewrite it first,
+        # and tell the UI what was actually searched for.
+        search_query = await self.rewrite_query(request.message, _earlier(history), trace)
+        if search_query != request.message:
+            yield AgentStepEvent(
+                step_id="rewrite_query",
+                agent="retriever",
+                status="completed",
+                title="Searched for",
+                detail=search_query,
+            )
+        sources = await self._retrieve(search_query, trace)
         prompt = self._render_system_prompt(sources)
         llm_messages = [ChatMessage(role="system", content=prompt.text), *history]
 
@@ -268,17 +283,22 @@ class ChatService:
         trace_name: str = "answer",
         session_id: str | None = None,
         tags: list[str] | None = None,
+        history: list[ChatMessage] | None = None,
     ) -> AnswerResult:
-        """Answer one question with the same system prompt, gateway and tracing as the chat,
-        but with no history and nothing saved. The eval runner uses this, so evals measure
-        what users get without filling the conversation list with test chats."""
+        """Answer one question with the same system prompt, gateway, rewriting and tracing as
+        the chat, but nothing saved. `history` = earlier turns, for follow-up questions. The
+        eval runner uses this, so evals measure what users get without filling the
+        conversation list with test chats."""
         trace = self._tracer.start_trace(
             trace_name, input=question, session_id=session_id, tags=tags
         )
-        chunks = await self._retrieve(question, trace)
+        earlier = history or []
+        search_query = await self.rewrite_query(question, earlier, trace)
+        chunks = await self._retrieve(search_query, trace)
         prompt = self._render_system_prompt(chunks)
         messages = [
             ChatMessage(role="system", content=prompt.text),
+            *earlier,
             ChatMessage(role="user", content=question),
         ]
         parts: list[str] = []
@@ -303,6 +323,7 @@ class ChatService:
             completion=completion,
             prompt_ref=prompt.ref,
             trace_id=trace.trace_id,
+            search_query=search_query,
             chunks=chunks,
             citations=citations_for(answer, chunks),
         )
@@ -311,9 +332,23 @@ class ChatService:
     def retriever_name(self) -> str:
         return self._retriever.name
 
-    async def retrieve(self, question: str) -> list[Chunk]:
-        """Retrieval alone, no LLM: what `evals.run --retrieval-only` measures (free, fast)."""
-        return await self._retriever.retrieve(question, top_k=self._top_k)
+    @property
+    def rewrites_queries(self) -> bool:
+        return self._query_rewriter is not None
+
+    async def retrieve(self, query: str, retriever: Retriever | None = None) -> list[Chunk]:
+        """Retrieval alone, no LLM: what `evals.run --retrieval-only` measures (free, fast).
+        `retriever` overrides the configured one, so evals can compare strategies."""
+        return await (retriever or self._retriever).retrieve(query, top_k=self._top_k)
+
+    async def rewrite_query(
+        self, question: str, earlier: list[ChatMessage], trace: Span | None = None
+    ) -> str:
+        """The search query for `question`: rewritten only if there are earlier turns and
+        rewriting is on. Without a trace (evals), the rewrite gets its own Langfuse trace."""
+        if self._query_rewriter is None or not earlier:
+            return question
+        return await self._query_rewriter.rewrite(question, earlier, trace)
 
     async def _retrieve(self, question: str, trace: Span) -> list[Chunk]:
         """Retrieve, recorded as a "retriever" step in the trace, so for any answer you can
@@ -386,6 +421,11 @@ class ChatService:
                 conversation.updated_at = func.now()
             await session.commit()
             return message.id
+
+
+def _earlier(history: list[ChatMessage]) -> list[ChatMessage]:
+    """History without its last message, which is the question being answered right now."""
+    return history[:-1] if history and history[-1].role == "user" else history
 
 
 def _usage(model_id: str, completion: Completion | None) -> Usage | None:

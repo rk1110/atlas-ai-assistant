@@ -28,7 +28,7 @@ from core.interfaces.data_source import DataSource, Document
 from core.rag_config import ChunkingConfig
 from ingestion.chunkers import ChunkDraft, MarkdownChunker
 from ingestion.parsers import parse
-from models import ChunkRecord, DocumentRecord
+from models import ChunkRecord, DocumentRecord, search_vector
 
 logger = logging.getLogger(__name__)
 
@@ -158,6 +158,7 @@ class IngestionPipeline:
                     heading=draft.heading,
                     token_count=draft.token_count,
                     embedding=vector,
+                    search_vector=search_vector(title, draft.heading, draft.text),
                 )
                 for i, (draft, vector) in enumerate(zip(drafts, vectors, strict=True))
             )

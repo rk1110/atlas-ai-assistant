@@ -5,7 +5,8 @@
     GET    /api/knowledge/chunks?document_id=...         one document's chunks, in order
     POST   /api/knowledge/uploads        (multipart)     save a file, ingest it in the background
     DELETE /api/knowledge/documents?document_id=...      uploads only
-    GET    /api/knowledge/search?q=...                   what retrieval returns for a query
+    GET    /api/knowledge/search?q=...&strategy=...      what retrieval returns for a query
+    GET    /api/knowledge/map                            2D map of every chunk's embedding
 
 Document ids contain ":" and "/" (e.g. "gitlab-handbook:/handbook/values/"), so they travel
 as query parameters rather than path segments.
@@ -17,6 +18,7 @@ response, in the same process; Phase 7 can move this to a Redis job queue if it 
 retries or several workers.
 """
 
+import time
 from datetime import datetime
 
 import anyio
@@ -25,11 +27,22 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import IngestionPipelineDep, RagConfigDep, RetrieverDep, SessionDep, UploadSourceDep
+from api.deps import (
+    EmbeddingMapDep,
+    IngestionPipelineDep,
+    RagConfigDep,
+    RetrieverBuilderDep,
+    RetrieverDep,
+    SessionDep,
+    UploadSourceDep,
+)
 from core.interfaces.retriever import Chunk
+from core.rag_config import RetrievalStrategy
 from ingestion.pipeline import IngestionPipeline
 from ingestion.sources.uploads import UploadSource
 from models import ChunkRecord, DocumentRecord
+from retrieval import STRATEGIES
+from services.embedding_map import MapPoint
 
 router = APIRouter(prefix="/api/knowledge", tags=["knowledge"])
 
@@ -64,11 +77,19 @@ class KnowledgeConfig(BaseModel):
     max_file_mb: float
     top_k: int
     embedding_model: str
+    strategies: list[str]  # retrieval strategies the tester can compare (Phase 3)
+    default_strategy: str  # the one the chat uses
 
 
 class SearchResponse(BaseModel):
     retriever: str
     chunks: list[Chunk]
+    latency_ms: int
+
+
+class EmbeddingMap(BaseModel):
+    method: str  # how 384 dimensions became 2, e.g. "t-SNE"
+    points: list[MapPoint]
 
 
 @router.get("/config")
@@ -80,6 +101,8 @@ async def knowledge_config(config: RagConfigDep, source: UploadSourceDep) -> Kno
         max_file_mb=config.uploads.max_file_mb,
         top_k=config.retrieval.top_k,
         embedding_model=config.embedding.model,
+        strategies=list(STRATEGIES),
+        default_strategy=config.retrieval.strategy,
     )
 
 
@@ -154,11 +177,25 @@ async def delete_document(
 
 @router.get("/search")
 async def search(
-    retriever: RetrieverDep, config: RagConfigDep, q: str = Query(min_length=2, max_length=500)
+    retriever: RetrieverDep,
+    build: RetrieverBuilderDep,
+    config: RagConfigDep,
+    q: str = Query(min_length=2, max_length=500),
+    strategy: RetrievalStrategy | None = None,
 ) -> SearchResponse:
-    """Retrieval alone, no LLM: shows exactly what the chat would put in the prompt."""
-    chunks = await retriever.retrieve(q, top_k=config.retrieval.top_k)
-    return SearchResponse(retriever=retriever.name, chunks=chunks)
+    """Retrieval alone, no LLM: shows exactly what the chat would put in the prompt.
+    `strategy` picks another retriever (Phase 3), so the page can compare them side by side."""
+    chosen = build(strategy) if strategy else retriever
+    started = time.perf_counter()
+    chunks = await chosen.retrieve(q, top_k=config.retrieval.top_k)
+    latency_ms = round((time.perf_counter() - started) * 1000)
+    return SearchResponse(retriever=chosen.name, chunks=chunks, latency_ms=latency_ms)
+
+
+@router.get("/map")
+async def embedding_map(maps: EmbeddingMapDep) -> EmbeddingMap:
+    """Every chunk as a point in 2D: chunks that mean similar things land close together."""
+    return EmbeddingMap(method=maps.method, points=await maps.points())
 
 
 async def _ingest_in_background(

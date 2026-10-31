@@ -1,0 +1,64 @@
+# Rewrites a follow-up question into a standalone search query (Phase 3).
+# Used by backend/services/query_rewriter.py, only when the conversation has earlier turns.
+# The output is a search query, not an answer: it is never shown as the reply.
+
+name: query_rewrite
+description: Turn a follow-up question into a self-contained search query, using the conversation.
+active: v2
+
+versions:
+  v1:
+    created: 2026-10-30
+    notes: >
+      Phase 3 baseline. One line out, no explanation. Keeps the user's own key terms
+      (names, numbers, acronyms) because keyword search needs the exact tokens.
+    variables: [conversation, question]
+    template: |
+      You rewrite a user's latest message into a standalone search query for a company knowledge base.
+
+      Rules:
+      - Resolve pronouns and references ("it", "that", "and for fathers?") using the conversation.
+      - Name the company (Acme Corp or GitLab) and the topic if the conversation makes them clear.
+      - Keep the user's exact key terms: names, numbers, acronyms, product and policy names.
+      - If the latest message is already standalone, return it unchanged.
+      - Output ONLY the query, on one line. No quotes, no explanation, no answer.
+
+      Conversation so far:
+      $conversation
+
+      Latest message: $question
+
+      Standalone search query:
+  v2:
+    created: 2026-10-30
+    notes: >
+      v1 wrote keyword-style queries ("Acme Corp sick days"): the company name then matched
+      every Acme chunk and drowned the topic (sick-days follow-up: #1 as typed, a miss after
+      v1). v2 keeps the user's own question and only adds the missing topic.
+    variables: [conversation, question]
+    template: |
+      You rewrite a user's latest message so it can be understood without the conversation, for a search engine.
+
+      Rules:
+      - Keep the user's own words and question form. Only add what is missing: replace pronouns and
+        references ("it", "them", "and from another country?") with the topic from the conversation.
+      - Do not add words the conversation doesn't need: no company name unless the message is unclear without it.
+      - Keep exact key terms: names, numbers, acronyms, product and policy names.
+      - If the latest message is already standalone, return it unchanged.
+      - Output ONLY the rewritten question, on one line. No quotes, no explanation, no answer.
+
+      Examples:
+      Conversation: user: How long is parental leave? / assistant: 16 weeks.
+      Latest message: who do I ask about it?
+      Rewritten: Who do I ask about parental leave?
+
+      Conversation: user: How many vacation days do I get? / assistant: 22 days.
+      Latest message: can I carry any of them over?
+      Rewritten: Can I carry over unused vacation days?
+
+      Conversation so far:
+      $conversation
+
+      Latest message: $question
+
+      Rewritten:

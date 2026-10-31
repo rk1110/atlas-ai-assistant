@@ -2,6 +2,7 @@
 
 import re
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, Field, field_validator, model_validator
@@ -10,12 +11,22 @@ GOLDEN_SET_PATH = Path(__file__).parent / "golden_set.yaml"
 ID_PATTERN = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
+class HistoryTurn(BaseModel):
+    """An earlier message in the conversation, for follow-up questions (Phase 3)."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(min_length=1)
+
+
 class GoldenQuestion(BaseModel):
     id: str
     question: str = Field(min_length=3)
     expected_answer: str = Field(min_length=1)
     expected_sources: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
+    # Earlier turns, oldest first. A question like "and for fathers?" only makes sense after
+    # them: this is what query rewriting is measured on.
+    history: list[HistoryTurn] = Field(default_factory=list)
 
     @field_validator("id")
     @classmethod

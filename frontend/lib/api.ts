@@ -77,6 +77,9 @@ export interface KnowledgeConfig {
   max_file_mb: number;
   top_k: number;
   embedding_model: string;
+  /** Retrieval strategies the tester can compare (Phase 3), e.g. "hybrid_graph". */
+  strategies: string[];
+  default_strategy: string;
 }
 
 /** Mirrors core.interfaces.retriever.Chunk. */
@@ -86,13 +89,132 @@ export interface RetrievedChunk {
   text: string;
   title: string;
   url: string | null;
-  metadata: { heading?: string | null; source?: string; ordinal?: number };
+  metadata: {
+    heading?: string | null;
+    source?: string;
+    ordinal?: number;
+    /** Hybrid search: where each retriever ranked this chunk, e.g. { vector: 3, keyword: 1 }. */
+    ranks?: Record<string, number>;
+    /** Reranking: the position before the cross-encoder re-ordered it. */
+    rank_before_rerank?: number;
+    /** Graph search: the entities the question matched. */
+    graph_entities?: string[];
+  };
   score: number | null;
 }
 
 export interface SearchResponse {
   retriever: string;
   chunks: RetrievedChunk[];
+  latency_ms: number;
+}
+
+/** One chunk on the embedding map (services/embedding_map.py). */
+export interface MapPoint {
+  chunk_id: string;
+  document_id: string;
+  title: string;
+  source: string;
+  heading: string | null;
+  preview: string;
+  x: number;
+  y: number;
+}
+
+export interface EmbeddingMap {
+  method: string;
+  points: MapPoint[];
+}
+
+// ---- Knowledge graph (Phase 3, api/graph.py) ----
+
+export interface GraphNode {
+  id: string;
+  name: string;
+  type: string;
+  description: string;
+  sources: string[];
+  degree: number;
+}
+
+export interface GraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  relation: string;
+  document_id: string;
+  evidence: string;
+}
+
+export interface GraphSnapshot {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
+export interface EntityMatch {
+  key: string;
+  name: string;
+  type: string;
+  score: number;
+}
+
+export interface GraphFact {
+  source: string;
+  relation: string;
+  target: string;
+  document_id: string;
+  document_title: string;
+  evidence: string;
+  hops: number;
+}
+
+export interface GraphSearch {
+  entities: EntityMatch[];
+  seeds: string[];
+  facts: GraphFact[];
+}
+
+// ---- Analytics (Phase 3, api/analytics.py) ----
+
+export interface EvalRunPoint {
+  id: string;
+  started_at: string;
+  model_id: string;
+  retriever: string | null;
+  notes: string | null;
+  question_count: number;
+  golden_set_version: number;
+  hit_rate: number | null;
+  mrr: number | null;
+  cited_correct_rate: number | null;
+  answer_correctness: number | null;
+  faithfulness: number | null;
+  context_precision: number | null;
+  avg_latency_ms: number | null;
+  total_cost_usd: number | null;
+}
+
+export interface UsageDay {
+  day: string;
+  answers: number;
+  errors: number;
+  avg_latency_ms: number | null;
+  input_tokens: number;
+  output_tokens: number;
+  cost_usd: number;
+}
+
+export interface Analytics {
+  totals: {
+    conversations: number;
+    answers: number;
+    documents: number;
+    chunks: number;
+    cost_usd: number;
+    avg_latency_ms: number | null;
+  };
+  eval_runs: EvalRunPoint[];
+  usage: UsageDay[];
 }
 
 export class ApiError extends Error {
@@ -146,13 +268,20 @@ export const api = {
     request<DocumentDetail>(`/api/knowledge/chunks?${query({ document_id: documentId })}`),
   deleteDocument: (documentId: string) =>
     request<void>(`/api/knowledge/documents?${query({ document_id: documentId })}`, { method: "DELETE" }),
-  search: (q: string) => request<SearchResponse>(`/api/knowledge/search?${query({ q })}`),
+  search: (q: string, strategy?: string) =>
+    request<SearchResponse>(`/api/knowledge/search?${query(strategy ? { q, strategy } : { q })}`),
+  embeddingMap: () => request<EmbeddingMap>("/api/knowledge/map"),
   /** Multipart upload; the browser sets the Content-Type (with its boundary) itself. */
   upload: (file: File) => {
     const body = new FormData();
     body.append("file", file);
     return request<KnowledgeDocument>("/api/knowledge/uploads", { method: "POST", body });
   },
+
+  graph: () => request<GraphSnapshot>("/api/graph"),
+  graphSearch: (q: string) => request<GraphSearch>(`/api/graph/search?${query({ q })}`),
+
+  analytics: () => request<Analytics>("/api/analytics"),
 };
 
 /** Fired after anything that changes the sidebar's conversation list. */

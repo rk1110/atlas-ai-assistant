@@ -1,24 +1,37 @@
 import { Network } from "lucide-react";
+import { connection } from "next/server";
 
+import { GraphExplorer } from "@/components/graph/graph-explorer";
 import { PageHeader } from "@/components/page-header";
-import { PagePlaceholder } from "@/components/page-placeholder";
+import { api, type GraphSnapshot } from "@/lib/api";
 
-export default function GraphPage() {
+/**
+ * Knowledge Graph Explorer. The graph is fetched on the server; if Neo4j isn't running or
+ * the graph hasn't been built yet, the page says how to fix that instead of erroring.
+ */
+export default async function GraphPage() {
+  await connection(); // per-request data: never prerender
+  let graph: GraphSnapshot | null = null;
+  try {
+    graph = await api.graph();
+  } catch {
+    graph = null;
+  }
   return (
     <>
       <PageHeader title="Knowledge Graph" />
-      <PagePlaceholder
-        icon={Network}
-        phase={3}
-        title="How people, teams and policies connect"
-        summary="Atlas will extract entities from the documents into a graph, so it can answer questions that span several documents."
-        features={[
-          "Zoomable graph of teams, people and policies",
-          "Click a node to see the documents that mention it",
-          "GraphRAG: answers that follow links between documents",
-          "Compare graph answers with plain search in the evals",
-        ]}
-      />
+      {graph && graph.nodes.length > 0 ? (
+        <GraphExplorer graph={graph} />
+      ) : (
+        <div className="mx-auto flex max-w-xl flex-col items-center gap-3 px-4 py-16 text-center">
+          <Network className="size-8 text-muted-foreground" />
+          <h2 className="text-lg font-medium">{graph ? "The graph is empty" : "The graph database isn't reachable"}</h2>
+          <p className="text-sm text-muted-foreground">
+            Start Neo4j with <code>docker compose up -d neo4j</code>, then build the graph with{" "}
+            <code>docker compose exec backend python -m graph.build</code>.
+          </p>
+        </div>
+      )}
     </>
   );
 }
