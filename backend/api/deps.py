@@ -12,6 +12,11 @@ from typing import Annotated
 from fastapi import Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agents.assistant import AssistantAgent
+from agents.checkpoints import get_checkpointer
+from agents.graph import build_graph
+from agents.runner import AgentRunner
+from core.agent_config import get_agent_config
 from core.config import Settings, get_settings
 from core.db import get_session, get_session_factory
 from core.embeddings import get_embedder
@@ -29,6 +34,8 @@ from services.chat_service import ChatService
 from services.embedding_map import EmbeddingMapService
 from services.intent import IntentClassifier
 from services.query_rewriter import QueryRewriter
+from simulated.store import SimulatedJira, SimulatedSlack
+from tools import get_tools
 
 
 @lru_cache
@@ -64,7 +71,30 @@ def make_chat_service(retriever: Retriever | None = None, *, rewrite: bool = Tru
         retriever or get_retriever(),
         get_rag_config().retrieval.top_k,
         get_query_rewriter() if rewrite else None,
+        get_classifier(),
+        get_agent_runner(),
+        get_agent_config(),
     )
+
+
+@lru_cache
+def get_agent_runner() -> AgentRunner:
+    """The tool-using agent (Phase 4). Built on first use, after main.py's startup has opened
+    the Postgres checkpointer, so paused runs survive restarts."""
+    tools = list(get_tools())
+    assistant = AssistantAgent(get_gateway(), get_prompts(), get_settings(), tools)
+    graph = build_graph(assistant, tools, get_checkpointer(), get_agent_config().max_model_calls)
+    return AgentRunner(graph)
+
+
+@lru_cache
+def get_jira() -> SimulatedJira:
+    return SimulatedJira(get_session_factory())
+
+
+@lru_cache
+def get_slack() -> SimulatedSlack:
+    return SimulatedSlack(get_session_factory())
 
 
 def get_query_rewriter() -> QueryRewriter | None:
@@ -115,6 +145,8 @@ ClassifierDep = Annotated[IntentClassifier, Depends(get_classifier)]
 RagConfigDep = Annotated[RagConfig, Depends(get_rag_config)]
 RetrieverDep = Annotated[Retriever, Depends(get_retriever)]
 RetrieverBuilderDep = Annotated[Callable[..., Retriever], Depends(get_retriever_builder)]
+JiraDep = Annotated[SimulatedJira, Depends(get_jira)]
+SlackDep = Annotated[SimulatedSlack, Depends(get_slack)]
 GraphStoreDep = Annotated[GraphStore | None, Depends(get_graph_store)]
 EmbeddingMapDep = Annotated[EmbeddingMapService, Depends(get_embedding_map)]
 IngestionPipelineDep = Annotated[IngestionPipeline, Depends(get_ingestion_pipeline)]

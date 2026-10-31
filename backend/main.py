@@ -14,7 +14,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import text
 
-from api import analytics, chat, classify, conversations, graph, knowledge, models
+from agents.checkpoints import postgres_checkpointer
+from api import analytics, chat, classify, conversations, graph, knowledge, models, outbox
 from api.deps import SessionDep, get_settings
 from core.embeddings import get_embedder
 from core.tracing import get_tracer
@@ -30,10 +31,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
     Startup: load the embedding model in the background (a few seconds), so the first chat
     question doesn't pay for it. In the background, not awaited, so the API is up at once.
+    Opens the agent's Postgres checkpointer (Phase 4) for the app's lifetime.
     Shutdown: flush buffered traces so the last requests still show up in Langfuse.
     """
     warm_up = asyncio.create_task(_warm_up_embedder())
-    yield
+    async with postgres_checkpointer():
+        yield
     warm_up.cancel()
     get_tracer().flush()
 
@@ -63,6 +66,7 @@ app.include_router(conversations.router)
 app.include_router(graph.router)
 app.include_router(knowledge.router)
 app.include_router(models.router)
+app.include_router(outbox.router)
 
 
 class HealthResponse(BaseModel):

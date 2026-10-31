@@ -52,5 +52,7 @@ class Message(Base):
     # The sources the answer cited, as CitationEvent dicts (Phase 2). JSONB rather than a
     # table: they're always read together with their message and never queried on their own.
     citations: Mapped[list[dict[str, Any]] | None] = mapped_column(JSONB)
+    # Agent answers (Phase 4): steps, tool calls and approval cards, as a core.events.AgentLog.
+    agent: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")

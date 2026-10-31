@@ -11,6 +11,8 @@ Flow of `stream_reply` (RAG = steps 2-3: Retrieval-Augmented Generation):
     3. render the versioned system prompt with those chunks as numbered sources, load history
     4. stream from the LLM gateway: each text delta becomes a TokenEvent
     5. turn the answer's [n] markers into CitationEvents (only sources it actually cited)
+    (Phase 4: if the intent classifier says the message asks for an ACTION, steps 2-5 are
+    handed to the tool-using agent instead: agents/, with human approval for writes.)
     6. save the assistant message with provenance (model, prompt, tokens, cost, citations)
     7. finish with DoneEvent, which is ALWAYS the last event, even after an error
 
@@ -25,15 +27,19 @@ from collections.abc import AsyncIterator
 from contextlib import aclosing
 from datetime import date
 from decimal import Decimal
+from typing import Any, Literal
 
 import anyio
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from agents.runner import AgentOutcome, AgentRunner
+from core.agent_config import AgentConfig
 from core.config import Settings
 from core.events import (
     RETRYABLE_CODES,
+    AgentLog,
     AgentStepEvent,
     CitationEvent,
     DoneEvent,
@@ -48,6 +54,7 @@ from core.prompts import PromptRegistry, RenderedPrompt
 from core.tracing import Span, Tracer
 from models import Conversation, Message
 from services.grounding import citations_for, format_sources
+from services.intent import IntentClassifier
 from services.query_rewriter import QueryRewriter
 
 logger = logging.getLogger(__name__)
@@ -64,6 +71,17 @@ class ChatRequest(BaseModel):
     # "Try again" after a failed answer: the question is already saved (it's saved before the
     # model is called), so answer it again instead of storing a second copy.
     retry: bool = False
+
+
+class ApprovalDecision(BaseModel):
+    """Body of POST /api/chat/approval: the human's answer to an approval card."""
+
+    conversation_id: uuid.UUID
+    approval_id: str = Field(min_length=3, max_length=200)
+    decision: Literal["approve", "reject"]
+    # Set when the human edited the action on the card; validated against the tool's schema.
+    args: dict[str, Any] | None = None
+    model_id: str | None = None
 
 
 class AnswerResult(BaseModel):
@@ -90,11 +108,18 @@ class ChatService:
         retriever: Retriever,
         top_k: int,
         query_rewriter: QueryRewriter | None = None,
+        router: IntentClassifier | None = None,
+        agent: AgentRunner | None = None,
+        agent_config: AgentConfig | None = None,
     ):
         self._gateway = gateway
         self._retriever = retriever
         self._top_k = top_k
         self._query_rewriter = query_rewriter  # None = always search with the raw question
+        # Phase 4: both set = action requests go to the agent; None = RAG chat only.
+        self._router = router
+        self._agent = agent
+        self._agent_config = agent_config or AgentConfig()
         self._prompts = prompts
         self._settings = settings
         self._session_factory = session_factory
@@ -146,6 +171,21 @@ class ChatService:
             await session.commit()
             history = await self._load_history(session, conversation.id)
 
+        route = await self._route(request.message, trace)
+        if route is not None:  # an action request: the agent handles the rest of the turn
+            yield route
+            run = self._agent.start(  # type: ignore[union-attr]  # _route checked it
+                conversation_id=str(request.conversation_id),
+                model_id=model_id,
+                messages=history,
+                trace=trace,
+            )
+            turn = self._agent_turn(run, request.conversation_id, model_id, trace)
+            async with aclosing(turn) as events:
+                async for event in events:
+                    yield event
+            return
+
         # A follow-up like "and for fathers?" searches poorly on its own: rewrite it first,
         # and tell the UI what was actually searched for.
         search_query = await self.rewrite_query(request.message, _earlier(history), trace)
@@ -189,7 +229,7 @@ class ChatService:
             if partial:
                 with anyio.CancelScope(shield=True):
                     await self._save_assistant_message(
-                        request.conversation_id, partial, model_id, prompt, None,
+                        request.conversation_id, partial, model_id, prompt.ref, None,
                         "cancelled", trace.trace_id, citations_for(partial, sources),
                     )  # fmt: skip
             raise
@@ -204,7 +244,7 @@ class ChatService:
                 request.conversation_id,
                 answer,
                 model_id,
-                prompt,
+                prompt.ref,
                 completion,
                 error.code if error else None,
                 trace.trace_id,
@@ -222,6 +262,153 @@ class ChatService:
             trace_id=trace.trace_id,
             trace_url=self._trace_url(trace),
         )
+
+    # ------------------------------------------------------------------ agent (Phase 4)
+
+    async def _route(self, message: str, trace: Span) -> AgentStepEvent | None:
+        """Agent or RAG? The Phase 1 intent classifier (cheap model) decides. Returns the
+        step to show when the agent takes over, None for the normal RAG answer. If the
+        classifier fails, fall back to RAG: answering is safer than acting."""
+        if self._router is None or self._agent is None or not self._agent_config.enabled:
+            return None
+        try:
+            result = await self._router.classify(message, trace=trace)
+        except LLMError as err:
+            logger.warning("routing failed [%s]; using RAG", err.kind)
+            return None
+        label = result.classification
+        if label.intent not in self._agent_config.route_intents:
+            return None
+        return AgentStepEvent(
+            step_id="route",
+            agent="router",
+            status="completed",
+            title="Action request: the agent takes over",
+            detail=label.reasoning,
+        )
+
+    async def check_approval(self, decision: ApprovalDecision) -> bool:
+        """Before streaming: is a run in this conversation waiting for this approval?"""
+        if self._agent is None:
+            return False
+        try:
+            await self._agent.check_approval(str(decision.conversation_id), decision.approval_id)
+        except Exception:  # noqa: BLE001 - any failure here means "no such approval"
+            return False
+        return True
+
+    async def resume_approval(
+        self, decision: ApprovalDecision, model_id: str
+    ) -> AsyncIterator[StreamEvent]:
+        """Continue a paused agent run with the human's decision. Same stream contract as
+        stream_reply: events, then always `done`."""
+        trace = self._tracer.start_trace(
+            "agent_resume",
+            input={"approval_id": decision.approval_id, "decision": decision.decision},
+            session_id=str(decision.conversation_id),
+            metadata={"model_id": model_id},
+        )
+        run = self._agent.resume(  # type: ignore[union-attr]  # route checked check_approval
+            conversation_id=str(decision.conversation_id),
+            approval_id=decision.approval_id,
+            decision=decision.decision,
+            args=decision.args,
+            trace=trace,
+        )
+        message_id, log = await self._paused_message(decision.approval_id)
+        state = "approved" if decision.decision == "approve" else "rejected"
+        log.decide(decision.approval_id, state)
+        try:
+            async with aclosing(
+                self._agent_turn(run, decision.conversation_id, model_id, trace, message_id, log)
+            ) as events:
+                async for event in events:
+                    yield event
+        except Exception:
+            logger.exception("approval resume failed for %s", decision.approval_id)
+            trace.finish(error="internal error")
+            yield ErrorEvent(
+                code="internal", message="Something went wrong on our side.", retryable=False
+            )
+            yield self._bare_done(trace)
+
+    async def _agent_turn(
+        self,
+        run: AsyncIterator[StreamEvent | AgentOutcome],
+        conversation_id: uuid.UUID,
+        model_id: str,
+        trace: Span,
+        message_id: uuid.UUID | None = None,
+        log: AgentLog | None = None,
+    ) -> AsyncIterator[StreamEvent]:
+        """Relay the agent's live events; then either save the turn as paused (the approval
+        card survives a reload), or stream the final answer, emit its citations and save it,
+        exactly like a RAG answer. A resumed turn updates the same message (`message_id`)."""
+        log = log or AgentLog()
+        outcome: AgentOutcome | None = None
+        try:
+            async for item in run:
+                if isinstance(item, AgentOutcome):
+                    outcome = item
+                else:
+                    log.record(item)
+                    yield item
+        except LLMError as err:
+            logger.warning("agent LLM error [%s]: %s", err.kind, err.detail)
+            trace.finish(error=err.message)
+            retryable = err.kind in RETRYABLE_CODES
+            yield ErrorEvent(code=err.kind, message=err.message, retryable=retryable)
+            yield self._bare_done(trace)
+            return
+        assert outcome is not None
+        usage_completion = _combined(outcome.completions)
+        if outcome.status == "paused":  # saved without text, so a reload still shows the card
+            trace.finish(output="paused: waiting for approval")
+            message_id = await self._save_assistant_message(
+                conversation_id, "", model_id, AGENT_PROMPT_REF, usage_completion,
+                AWAITING_APPROVAL, trace.trace_id, [], agent=log, message_id=message_id,
+            )  # fmt: skip
+            yield DoneEvent(
+                message_id=str(message_id),
+                usage=_usage(model_id, usage_completion),
+                prompt_ref=AGENT_PROMPT_REF,
+                trace_id=trace.trace_id,
+                trace_url=self._trace_url(trace),
+            )
+            return
+
+        for piece in _pieces(outcome.answer):
+            yield TokenEvent(text=piece)
+        citations = citations_for(outcome.answer, outcome.sources)
+        trace.finish(output=outcome.answer)
+        message_id = await self._save_assistant_message(
+            conversation_id, outcome.answer, model_id, AGENT_PROMPT_REF, usage_completion,
+            None, trace.trace_id, citations, agent=log, message_id=message_id,
+        )  # fmt: skip
+        for citation in citations:
+            yield citation
+        yield DoneEvent(
+            message_id=str(message_id),
+            usage=_usage(model_id, usage_completion),
+            prompt_ref=AGENT_PROMPT_REF,
+            trace_id=trace.trace_id,
+            trace_url=self._trace_url(trace),
+        )
+
+    async def _paused_message(self, approval_id: str) -> tuple[uuid.UUID | None, AgentLog]:
+        """The message saved when the run paused on this approval (JSONB containment query)."""
+        async with self._session_factory() as session:
+            message = await session.scalar(
+                select(Message).where(
+                    Message.agent.contains({"approvals": [{"approval_id": approval_id}]})
+                )
+            )
+        if message is None or not message.agent:
+            return None, AgentLog()
+        return message.id, AgentLog.model_validate(message.agent)
+
+    def _bare_done(self, trace: Span) -> DoneEvent:
+        return DoneEvent(message_id=None, trace_id=trace.trace_id, trace_url=self._trace_url(trace))
 
     def _trace_url(self, trace: Span) -> str | None:
         return self._tracer.trace_url(trace.trace_id)
@@ -389,24 +576,28 @@ class ChatService:
         conversation_id: uuid.UUID,
         answer: str,
         model_id: str,
-        prompt: RenderedPrompt,
+        prompt_ref: str,
         completion: Completion | None,
         error_code: str | None,
         trace_id: str | None,
         citations: list[CitationEvent],
+        *,
+        agent: AgentLog | None = None,
+        message_id: uuid.UUID | None = None,
     ) -> uuid.UUID:
+        """Insert the answer, or update `message_id` (an agent turn resumed after approval)."""
         async with self._session_factory() as session:
-            message = Message(
-                conversation_id=conversation_id,
-                role="assistant",
-                content=answer,
-                model_id=model_id,
-                prompt_ref=prompt.ref,
-                error_code=error_code,
-                trace_id=trace_id,
-                # Stored so a reopened conversation shows the same chips.
-                citations=[c.model_dump() for c in citations] or None,
-            )
+            message = (await session.get(Message, message_id)) if message_id else None
+            if message is None:
+                message = Message(conversation_id=conversation_id, role="assistant")
+            message.content = answer
+            message.model_id = model_id
+            message.prompt_ref = prompt_ref
+            message.error_code = error_code
+            message.trace_id = trace_id
+            # Stored so a reopened conversation shows the same chips.
+            message.citations = [c.model_dump() for c in citations] or None
+            message.agent = agent.model_dump() if agent else None
             if completion:
                 message.input_tokens = completion.input_tokens
                 message.output_tokens = completion.output_tokens
@@ -421,6 +612,35 @@ class ChatService:
                 conversation.updated_at = func.now()
             await session.commit()
             return message.id
+
+
+AGENT_PROMPT_REF = "agent_system"  # recorded on agent answers (the version is in the trace)
+# error_code of an agent turn paused on an approval card: kept out of the model's history
+# (_load_history skips messages with an error_code) until the turn finishes.
+AWAITING_APPROVAL = "awaiting_approval"
+
+
+def _pieces(text: str, size: int = 24) -> list[str]:
+    """The agent's answer arrives whole (tool-calling replies aren't streamed); sending it in
+    small pieces keeps the typing effect and the same token-event contract as RAG answers."""
+    return [text[i : i + size] for i in range(0, len(text), size)]
+
+
+def _combined(completions: list[Completion]) -> Completion | None:
+    """Several model calls in one agent turn, summed into one usage record."""
+    if not completions:
+        return None
+    costs = [c.cost_usd for c in completions]
+    last = completions[-1]
+    return last.model_copy(
+        update={
+            "input_tokens": sum(c.input_tokens for c in completions),
+            "output_tokens": sum(c.output_tokens for c in completions),
+            "cost_usd": None if any(c is None for c in costs) else sum(costs),  # type: ignore[arg-type]
+            "latency_ms": sum(c.latency_ms for c in completions),
+            "time_to_first_token_ms": None,
+        }
+    )
 
 
 def _earlier(history: list[ChatMessage]) -> list[ChatMessage]:

@@ -1,4 +1,4 @@
-import type { CitationEvent } from "@/lib/events";
+import type { AgentStepEvent, ApprovalRequestEvent, CitationEvent, ToolCallEvent } from "@/lib/events";
 
 /**
  * Typed client for the Atlas backend's JSON endpoints (everything except the chat stream,
@@ -29,6 +29,13 @@ export interface ConversationSummary {
   updated_at: string;
 }
 
+/** Mirrors core.events.AgentLog. */
+export interface StoredAgentLog {
+  steps: AgentStepEvent[];
+  tool_calls: ToolCallEvent[];
+  approvals: (ApprovalRequestEvent & { state: "pending" | "approved" | "rejected" })[];
+}
+
 export interface StoredMessage {
   id: string;
   role: "user" | "assistant";
@@ -41,6 +48,8 @@ export interface StoredMessage {
   latency_ms: number | null;
   trace_url: string | null;
   citations: CitationEvent[];
+  /** Agent answers (Phase 4): steps, tool calls and approval cards, as saved by the backend. */
+  agent: StoredAgentLog | null;
 }
 
 // ---- Knowledge Base (backend/api/knowledge.py) ----
@@ -174,6 +183,29 @@ export interface GraphSearch {
   facts: GraphFact[];
 }
 
+// ---- Outbox: what approved agent actions sent to the simulated Jira and Slack (Phase 4) ----
+
+export interface OutboxTicket {
+  key: string;
+  project: string;
+  summary: string;
+  description: string;
+  priority: string;
+  status: string;
+  created_at: string;
+}
+
+export interface OutboxMessage {
+  channel: string;
+  text: string;
+  created_at: string;
+}
+
+export interface Outbox {
+  tickets: OutboxTicket[];
+  messages: OutboxMessage[];
+}
+
 // ---- Analytics (Phase 3, api/analytics.py) ----
 
 export interface EvalRunPoint {
@@ -282,6 +314,7 @@ export const api = {
   graphSearch: (q: string) => request<GraphSearch>(`/api/graph/search?${query({ q })}`),
 
   analytics: () => request<Analytics>("/api/analytics"),
+  outbox: () => request<Outbox>("/api/outbox"),
 };
 
 /** Fired after anything that changes the sidebar's conversation list. */

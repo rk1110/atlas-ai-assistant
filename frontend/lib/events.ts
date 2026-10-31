@@ -90,6 +90,8 @@ export interface ToolCallEvent {
   call_id: string;
   tool_name: string;
   status: StepStatus;
+  /** One line for humans, e.g. "Create a high-priority IT ticket: “Broken screen”". */
+  summary: string | null;
   input: Record<string, unknown>;
   output: unknown;
   error: string | null;

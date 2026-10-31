@@ -107,6 +107,8 @@ class ToolCallEvent(BaseModel):
     call_id: str
     tool_name: str
     status: StepStatus
+    # One line for humans, e.g. "Create a high-priority IT ticket: “Broken screen”" (Phase 4)
+    summary: str | None = None
     input: dict[str, Any]
     output: Any | None = None  # set when status == "completed"
     error: str | None = None  # set when status == "failed"
@@ -123,6 +125,39 @@ class ApprovalRequestEvent(BaseModel):
     tool_name: str
     summary: str  # e.g. "Create Jira ticket HR-123: Confirm parental leave dates"
     payload: dict[str, Any]  # the exact arguments that will be sent if approved
+
+
+class ApprovalRecord(ApprovalRequestEvent):
+    """An approval card as stored with its message: the request plus what the human chose."""
+
+    state: Literal["pending", "approved", "rejected"] = "pending"
+
+
+class AgentLog(BaseModel):
+    """What the agent did in one answer, saved on the message (Phase 4), so a reloaded or
+    reopened chat shows the same steps, tool calls and approval cards. Not a stream event:
+    it's built FROM the events, keeping the latest event per step / tool call."""
+
+    steps: list[AgentStepEvent] = Field(default_factory=list)
+    tool_calls: list[ToolCallEvent] = Field(default_factory=list)
+    approvals: list[ApprovalRecord] = Field(default_factory=list)
+
+    def record(self, event: "StreamEvent") -> None:
+        if isinstance(event, AgentStepEvent):
+            self.steps = [s for s in self.steps if s.step_id != event.step_id] + [event]
+        elif isinstance(event, ToolCallEvent):
+            known = [c.call_id for c in self.tool_calls]
+            if event.call_id in known:
+                self.tool_calls[known.index(event.call_id)] = event
+            else:
+                self.tool_calls.append(event)
+        elif isinstance(event, ApprovalRequestEvent):
+            self.approvals.append(ApprovalRecord(**event.model_dump()))
+
+    def decide(self, approval_id: str, state: Literal["approved", "rejected"]) -> None:
+        for approval in self.approvals:
+            if approval.approval_id == approval_id:
+                approval.state = state
 
 
 # ---------------------------------------------------------------- The union + SSE encoding

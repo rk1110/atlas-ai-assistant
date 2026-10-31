@@ -10,6 +10,9 @@
  *
  * Network packets don't line up with events (one read can hold half an event, or three), so
  * incomplete text stays in `buffer` until its blank-line terminator arrives.
+ *
+ * Phase 4: an agent turn can pause on an approval card. `respond()` sends the decision to
+ * POST /api/chat/approval and streams the rest of the turn into the SAME answer bubble.
  */
 
 import { useCallback, useRef, useState } from "react";
@@ -17,14 +20,25 @@ import { useCallback, useRef, useState } from "react";
 import { BROWSER_API_URL } from "@/lib/api";
 import {
   type AgentStepEvent,
+  type ApprovalRequestEvent,
   type CitationEvent,
   type ErrorEvent,
   parseStreamEvent,
   type StreamEvent,
+  type ToolCallEvent,
   type Usage,
 } from "@/lib/events";
 
 export type MessageStatus = "streaming" | "done" | "error" | "stopped";
+
+export type ApprovalState = "pending" | "sending" | "approved" | "rejected";
+
+/** An approval card: the request, plus what the human did with it. */
+export interface Approval extends ApprovalRequestEvent {
+  state: ApprovalState;
+}
+
+export type ApprovalDecision = "approve" | "reject";
 
 export interface ChatMessage {
   id: string;
@@ -36,6 +50,10 @@ export interface ChatMessage {
   citations: CitationEvent[];
   /** Steps taken before answering, e.g. "Searched for: <rewritten question>" (Phase 3). */
   steps: AgentStepEvent[];
+  /** Tools the agent used, latest status per call (Phase 4). */
+  toolCalls: ToolCallEvent[];
+  /** Actions waiting for (or answered by) the human (Phase 4). */
+  approvals: Approval[];
   usage: Usage | null;
   traceUrl: string | null;
   modelId: string | null;
@@ -60,21 +78,10 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
     setMessages((prev) => prev.map((m) => (m.id === id ? change(m) : m)));
   }, []);
 
-  const send = useCallback(
-    async (text: string, modelId: string | null, { retry = false }: { retry?: boolean } = {}) => {
-      // Temporary id until the `done` event tells us the id the backend saved it under.
-      let assistantId = crypto.randomUUID();
-      setMessages((prev) =>
-        retry
-          ? // Try again: the question is already on screen (and saved). Swap the failed answer
-            // for a fresh one instead of adding the question a second time.
-            [...prev.filter((m) => !(m === prev.at(-1) && m.status === "error")), blank(assistantId, "assistant", modelId)]
-          : [
-              ...prev,
-              { ...blank(crypto.randomUUID(), "user", modelId), content: text, status: "done" },
-              blank(assistantId, "assistant", modelId),
-            ],
-      );
+  /** POST `body` to `path` and apply the SSE events to the assistant message `targetId`. */
+  const streamInto = useCallback(
+    async (path: string, body: unknown, targetId: string) => {
+      let assistantId = targetId;
       setIsStreaming(true);
       const controller = new AbortController();
       abortRef.current = controller;
@@ -108,20 +115,29 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
             updateMessage(assistantId, (m) => ({ ...m, steps: [...m.steps, event] }));
             break;
           case "tool_call":
+            // started -> completed/failed arrive as separate events for one call_id: keep the latest.
+            updateMessage(assistantId, (m) => ({
+              ...m,
+              toolCalls: m.toolCalls.some((c) => c.call_id === event.call_id)
+                ? m.toolCalls.map((c) => (c.call_id === event.call_id ? event : c))
+                : [...m.toolCalls, event],
+            }));
+            break;
           case "approval_request":
-            break; // Phase 4+ events: the UI for these arrives with those phases.
+            updateMessage(assistantId, (m) => ({ ...m, approvals: [...m.approvals, { ...event, state: "pending" }] }));
+            break;
         }
       };
 
       try {
-        const response = await fetch(`${BROWSER_API_URL}/api/chat`, {
+        const response = await fetch(`${BROWSER_API_URL}${path}`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ conversation_id: getConversationId(), message: text, model_id: modelId, retry }),
+          body: JSON.stringify(body),
           signal: controller.signal,
         });
         if (!response.ok || !response.body) {
-          // Rejected before streaming started (400 unknown model, 422 invalid input).
+          // Rejected before streaming started (400 unknown model, 404 stale approval, 422 invalid input).
           handle(httpError(response.status, await response.text()));
           return;
         }
@@ -146,12 +162,64 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
         onTurnEnd?.({ failed });
       }
     },
-    [getConversationId, onTurnEnd, updateMessage],
+    [onTurnEnd, updateMessage],
+  );
+
+  const send = useCallback(
+    async (text: string, modelId: string | null, { retry = false }: { retry?: boolean } = {}) => {
+      // Temporary id until the `done` event tells us the id the backend saved it under.
+      const assistantId = crypto.randomUUID();
+      setMessages((prev) =>
+        retry
+          ? // Try again: the question is already on screen (and saved). Swap the failed answer
+            // for a fresh one instead of adding the question a second time.
+            [...prev.filter((m) => !(m === prev.at(-1) && m.status === "error")), blank(assistantId, "assistant", modelId)]
+          : [
+              ...prev,
+              { ...blank(crypto.randomUUID(), "user", modelId), content: text, status: "done" },
+              blank(assistantId, "assistant", modelId),
+            ],
+      );
+      await streamInto(
+        "/api/chat",
+        { conversation_id: getConversationId(), message: text, model_id: modelId, retry },
+        assistantId,
+      );
+    },
+    [getConversationId, streamInto],
+  );
+
+  /** Answer an approval card: the agent resumes and the turn continues in the same bubble. */
+  const respond = useCallback(
+    async (messageId: string, approvalId: string, decision: ApprovalDecision, args?: Record<string, unknown>) => {
+      const owner = messages.find((m) => m.id === messageId);
+      if (!owner) return;
+      updateMessage(messageId, (m) => ({
+        ...m,
+        status: "streaming",
+        error: null,
+        approvals: m.approvals.map((a) =>
+          a.approval_id === approvalId ? { ...a, state: decision === "approve" ? "approved" : "rejected" } : a,
+        ),
+      }));
+      await streamInto(
+        "/api/chat/approval",
+        {
+          conversation_id: getConversationId(),
+          approval_id: approvalId,
+          decision,
+          args: args ?? null,
+          model_id: owner.modelId,
+        },
+        messageId,
+      );
+    },
+    [getConversationId, messages, streamInto, updateMessage],
   );
 
   const stop = useCallback(() => abortRef.current?.abort(), []);
 
-  return { messages, isStreaming, send, stop };
+  return { messages, isStreaming, send, respond, stop };
 }
 
 /** Read an SSE body and call `onEvent` for every complete `data:` frame. */
@@ -188,6 +256,8 @@ function blank(id: string, role: ChatMessage["role"], modelId: string | null): C
     error: null,
     citations: [],
     steps: [],
+    toolCalls: [],
+    approvals: [],
     usage: null,
     traceUrl: null,
     modelId,

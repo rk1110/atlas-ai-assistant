@@ -3,9 +3,9 @@ import { CornerDownRight } from "lucide-react";
 import type { AgentStepEvent } from "@/lib/events";
 
 /**
- * What Atlas did before answering. Phase 3 has one step: a follow-up question is rewritten
- * into a standalone search ("and for fathers?" → "Parental leave for fathers at Acme"), and
- * showing the rewrite makes a surprising answer explainable. Phase 4 adds agent steps here.
+ * What Atlas did before answering: a follow-up rewritten into a standalone search (Phase 3),
+ * the router handing an action request to the agent, and each "thinking" step of the agent
+ * loop (Phase 4). Showing the steps makes a surprising answer explainable.
  */
 export function MessageSteps({ steps }: { steps: AgentStepEvent[] }) {
   const done = steps.filter((s) => s.status === "completed");

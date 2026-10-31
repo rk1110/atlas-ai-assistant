@@ -10,7 +10,8 @@ result back so the model can continue. So a tool is three things:
                            and validating against it rejects malformed arguments
     run()               -> the actual Python that does the work
 
-Planned tools: search_docs, calculator (read-only); create_ticket, post_slack (write).
+Tools (backend/tools/): search_docs, query_org_chart, calculator (read-only);
+create_ticket, post_slack_message (write: always need approval).
 MCP-backed tools (Phase 5) are adapters that implement this same class.
 """
 
@@ -55,6 +56,22 @@ class Tool[InputT: BaseModel](ABC):
     def json_schema(cls) -> dict[str, Any]:
         """The input schema sent to the model in the tool definition."""
         return cls.input_model.model_json_schema()
+
+    @classmethod
+    def definition(cls) -> dict[str, Any]:
+        """The tool as the model sees it (OpenAI function format; LiteLLM converts it)."""
+        return {
+            "type": "function",
+            "function": {
+                "name": cls.name,
+                "description": cls.description,
+                "parameters": cls.json_schema(),
+            },
+        }
+
+    def describe_call(self, args: InputT) -> str:
+        """One line for a human, e.g. on the approval card: what exactly will happen."""
+        return f"{self.name}({args.model_dump_json()})"
 
     @abstractmethod
     async def run(self, args: InputT) -> ToolResult:

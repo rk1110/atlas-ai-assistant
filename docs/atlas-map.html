@@ -182,8 +182,8 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 <div class="wrap">
   <header class="head">
     <div class="fix">
-      <span>Position: <b>Phase 3 built: hybrid search, GraphRAG, LLM judge, CI</b></span>
-      <span>Next: <b>Quiz + exercises for Phases 2–3, then Phase 4 (agents)</b></span>
+      <span>Position: <b>Phase 4A built: agent, tools, approval cards</b></span>
+      <span>Next: <b>Phase 4B: memory, agent activity panel, agent evals</b></span>
       <span>Updated <b>2026-10-31</b></span>
     </div>
     <h1>Atlas Map</h1>
@@ -267,6 +267,9 @@ const NODES = {
   service:  { layer: "Service", name: "Chat service", file: "backend/services/chat_service.py", status: "built",
               what: "Runs one chat turn: save question, retrieve sources, render the grounded prompt, stream from the gateway, emit citations, save answer, send done.",
               concept: "<strong>No HTTP inside.</strong> The eval runner reuses this exact code, so evals test what users get." },
+  agent:    { layer: "Service", name: "Agent (LangGraph)", file: "backend/agents/ + tools/ + config/agent.yaml", status: "built",
+              what: "For action requests: a loop of think → use tools → think. Read tools (search, org chart, calculator) run at once; write tools (Jira ticket, Slack post) pause for your approval.",
+              concept: "<strong>Human in the loop.</strong> The graph pauses (interrupt), its state is saved in Postgres, and your Approve click resumes it. Nothing is written before you say yes." },
   rewriter: { layer: "Service", name: "Query rewriter", file: "backend/services/query_rewriter.py + prompts/query_rewrite.yaml", status: "built",
               what: "For follow-ups only, the cheap model turns 'who do I ask about it?' into 'Who do I ask about parental leave?' before searching.",
               concept: "<strong>Query rewriting.</strong> Search only sees the words it's given. Follow-up correctness went from 42% to 83%." },
@@ -383,13 +386,15 @@ const CHECKPOINTS = [
   { name: "Phase 3 · search", status: "built", items: ["BM25 keyword + hybrid (RRF), BGE reranker (opt-in)", "Query rewriting v2: follow-ups 42% → 83%"] },
   { name: "Phase 3 · graph", status: "built", items: ["Neo4j GraphRAG: 71 entities, 134 relations", "Graph explorer page"] },
   { name: "Phase 3 · evals", status: "built", items: ["50 questions, LLM judge, CI retrieval gate", "Embedding map, Analytics; quiz + exercises pending"] },
+  { name: "Phase 4 · part A", status: "built", items: ["LangGraph agent, 5 tools, approval cards", "Simulated Jira/Slack + Outbox page"] },
+  { name: "Phase 4 · part B", status: "next", items: ["Short- and long-term memory", "Agent activity panel, agent evals"] },
 ];
 
 const PHASES = [
   { no: 1, name: "Foundation", what: "App shell, streaming chat, gateway, tracing, eval scaffold." },
   { no: 2, name: "Core RAG", what: "Load the handbook and Acme docs, embeddings, pgvector, citation chips.", demo: "Demo 1" },
-  { no: 3, name: "Advanced RAG + evals", what: "Hybrid search, reranker, query rewriting, GraphRAG, evals in CI.", now: true },
-  { no: 4, name: "Agents + tools", what: "LangGraph agent, tools, approval cards, memory." },
+  { no: 3, name: "Advanced RAG + evals", what: "Hybrid search, reranker, query rewriting, GraphRAG, evals in CI." },
+  { no: 4, name: "Agents + tools", what: "LangGraph agent, tools, approval cards, memory.", now: true },
   { no: 5, name: "Multi-agent + MCP", what: "Planner, Researcher, Action and Verifier; Jira and Slack via MCP.", demo: "Demo 2" },
   { no: 6, name: "Multimodal + voice", what: "Questions about images and scanned PDFs; speak and listen." },
   { no: 7, name: "Production-ready", what: "Guardrails, caching, model routing, login, cost dashboard, deploy." },

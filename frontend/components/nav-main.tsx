@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, BookOpen, MessageSquare, Network, Settings } from "lucide-react";
+import { BarChart3, BookOpen, Inbox, MessageSquare, Network, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -17,6 +17,7 @@ const NAV_ITEMS = [
   { href: "/knowledge", label: "Knowledge Base", icon: BookOpen },
   { href: "/graph", label: "Knowledge Graph", icon: Network },
   { href: "/analytics", label: "Analytics", icon: BarChart3 },
+  { href: "/outbox", label: "Outbox", icon: Inbox },
   { href: "/settings", label: "Settings", icon: Settings },
 ] as const;
 

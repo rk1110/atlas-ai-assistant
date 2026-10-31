@@ -3,14 +3,29 @@
 import { motion } from "motion/react";
 
 import { AnswerMarkdown } from "@/components/chat/answer-markdown";
+import { ApprovalCard } from "@/components/chat/approval-card";
 import { CitationList } from "@/components/chat/citation-list";
 import { ErrorBanner } from "@/components/chat/error-banner";
 import { MessageMeta } from "@/components/chat/message-meta";
 import { MessageSteps } from "@/components/chat/message-steps";
-import type { ChatMessage } from "@/lib/use-chat-stream";
+import { ToolCallList } from "@/components/chat/tool-call-list";
+import type { ApprovalDecision, ChatMessage } from "@/lib/use-chat-stream";
+
+export type RespondHandler = (approvalId: string, decision: ApprovalDecision, args?: Record<string, unknown>) => void;
 
 /** One message. User text is shown as typed; assistant text is Markdown with source chips. */
-export function MessageBubble({ message, onRetry }: { message: ChatMessage; onRetry?: () => void }) {
+export function MessageBubble({
+  message,
+  onRetry,
+  onRespond,
+  busy = false,
+}: {
+  message: ChatMessage;
+  onRetry?: () => void;
+  onRespond?: RespondHandler;
+  /** Another answer is streaming: approval buttons wait. */
+  busy?: boolean;
+}) {
   // Only new messages fade in. History must be visible in the server-rendered HTML, before
   // JavaScript loads; `initial={false}` renders it at its final state.
   const enter = message.live ? { opacity: 0, y: 6 } : false;
@@ -24,10 +39,19 @@ export function MessageBubble({ message, onRetry }: { message: ChatMessage; onRe
     );
   }
 
-  const waiting = message.status === "streaming" && message.content === "";
+  const waiting = message.status === "streaming" && message.content === "" && message.toolCalls.length === 0;
   return (
     <motion.div initial={enter} animate={{ opacity: 1, y: 0 }} className="flex flex-col gap-2">
       <MessageSteps steps={message.steps} />
+      <ToolCallList calls={message.toolCalls} />
+      {message.approvals.map((approval) => (
+        <ApprovalCard
+          key={approval.approval_id}
+          approval={approval}
+          disabled={busy || !onRespond}
+          onRespond={(decision, args) => onRespond?.(approval.approval_id, decision, args)}
+        />
+      ))}
       {waiting ? (
         <ThinkingDots />
       ) : (

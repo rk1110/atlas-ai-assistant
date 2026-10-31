@@ -8,9 +8,10 @@ Owning this single choke point is what makes cross-cutting features cheap:
 - every call is traced in Langfuse here, once (step 5);
 - Phase 7 adds caching, routing and cost caps here, once.
 
-Two kinds of call:
+Three kinds of call:
 - `stream_chat`: free text, streamed as `TextDelta`s then one `Completion` (the chat UI)
-- `complete_structured`: JSON that must match a Pydantic schema (classification, tool inputs)
+- `complete_structured`: JSON that must match a Pydantic schema (classification, judging)
+- `complete_with_tools`: the model may answer, or ask us to run tools (the agent, Phase 4)
 """
 
 import asyncio
@@ -35,11 +36,33 @@ from core.tracing import Generation, Span, Tracer
 litellm.suppress_debug_info = True  # LiteLLM otherwise prints help banners on every error
 
 
-class ChatMessage(BaseModel):
-    """One message in a conversation, in the role/content shape every chat model accepts."""
+class ToolCall(BaseModel):
+    """The model asking us to run a tool. It never runs anything itself."""
 
-    role: Literal["system", "user", "assistant"]
+    id: str  # the provider's id; the tool's result must quote it back (tool_call_id)
+    name: str
+    arguments: dict[str, Any]  # parsed from the JSON string the model wrote
+
+
+class ChatMessage(BaseModel):
+    """One message in a conversation, in the role/content shape every chat model accepts.
+
+    Agents (Phase 4) add two shapes: an assistant message that carries `tool_calls`, and a
+    `tool` message carrying one tool's result, linked to its call by `tool_call_id`.
+    """
+
+    role: Literal["system", "user", "assistant", "tool"]
     content: str
+    tool_calls: list[ToolCall] | None = None
+    tool_call_id: str | None = None
+
+
+class ToolTurn(BaseModel):
+    """Result of `complete_with_tools`: some text, and zero or more tool calls."""
+
+    text: str
+    tool_calls: list[ToolCall]
+    completion: "Completion"
 
 
 class TextDelta(BaseModel):
@@ -65,6 +88,7 @@ class Completion(BaseModel):
 
 
 LLMChunk = Annotated[TextDelta | Completion, Field(discriminator="type")]
+ToolTurn.model_rebuild()
 
 LLMErrorKind = Literal[
     "unknown_model",
@@ -281,6 +305,53 @@ class LLMGateway:
             span.finish(error=error.message)
         raise error
 
+    # ------------------------------------------------------------------ tool calling
+
+    async def complete_with_tools(
+        self,
+        model_id: str,
+        messages: list[ChatMessage],
+        tools: list[dict[str, Any]],
+        *,
+        trace: Span | None = None,
+        name: str = "agent",
+        prompt_ref: str | None = None,
+    ) -> ToolTurn:
+        """One agent step: send the conversation plus tool definitions; get back text and/or
+        tool calls. Not streamed: the agent needs the whole decision before it can act.
+
+        `tools` are OpenAI-style function definitions (name, description, JSON Schema of the
+        arguments); LiteLLM translates them for each provider. Arguments come back as a JSON
+        *string* written by the model, so they can be invalid: unparseable ones are passed on
+        as {"_invalid_json": ...}, and the tool's schema validation reports the problem to
+        the model as an error it can fix.
+        """
+        entry = await self._usable_entry(model_id)
+        own_trace = trace is None
+        span = trace or self._tracer.start_trace(name, input=_dump(messages))
+        generation = self._start_generation(span, name, entry, messages, prompt_ref)
+        started = time.perf_counter()
+        try:
+            response = await litellm.acompletion(
+                messages=_dump(messages), tools=tools, **self._call_kwargs(entry)
+            )
+        except Exception as exc:
+            err = self._translate_error(exc, entry)
+            _record_failure(err, generation, span if own_trace else None)
+            raise err from exc
+
+        choice = response.choices[0]
+        calls = [_tool_call(c) for c in (choice.message.tool_calls or [])]
+        text = choice.message.content or ""
+        completion = self._completion(
+            entry, response.usage, choice.finish_reason, started, None, span.trace_id
+        )
+        output = {"text": text, "tool_calls": [c.model_dump() for c in calls]}
+        self._finish_generation(generation, output, completion, prompt_ref)
+        if own_trace:
+            span.finish(output=output)
+        return ToolTurn(text=text, tool_calls=calls, completion=completion)
+
     # ------------------------------------------------------------------ helpers
 
     async def _usable_entry(self, model_id: str) -> ModelEntry:
@@ -468,5 +539,38 @@ def _record_failure(err: LLMError, generation: Generation, own_span: Span | None
         own_span.finish(error=err.message)
 
 
-def _dump(messages: list[ChatMessage]) -> list[dict[str, str]]:
-    return [m.model_dump() for m in messages]
+def _dump(messages: list[ChatMessage]) -> list[dict[str, Any]]:
+    """Our messages in the OpenAI wire format LiteLLM expects (tool calls carry their
+    arguments as a JSON string there)."""
+    return [_wire(m) for m in messages]
+
+
+def _wire(m: ChatMessage) -> dict[str, Any]:
+    if m.role == "tool":
+        return {"role": "tool", "tool_call_id": m.tool_call_id, "content": m.content}
+    if m.tool_calls:
+        return {
+            "role": "assistant",
+            "content": m.content or None,
+            "tool_calls": [
+                {
+                    "id": c.id,
+                    "type": "function",
+                    "function": {"name": c.name, "arguments": json.dumps(c.arguments)},
+                }
+                for c in m.tool_calls
+            ],
+        }
+    return {"role": m.role, "content": m.content}
+
+
+def _tool_call(raw: Any) -> ToolCall:
+    arguments = raw.function.arguments or "{}"
+    try:
+        parsed = json.loads(arguments) if isinstance(arguments, str) else dict(arguments)
+    except json.JSONDecodeError:
+        parsed = {"_invalid_json": arguments}
+    if not isinstance(parsed, dict):
+        parsed = {"_invalid_json": arguments}
+    name = raw.function.name
+    return ToolCall(id=raw.id or f"call_{name}", name=name, arguments=parsed)

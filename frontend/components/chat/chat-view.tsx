@@ -44,7 +44,7 @@ export function ChatView({ conversationId, title, initialMessages }: Props) {
     [isNew, router],
   );
 
-  const { messages, isStreaming, send, stop } = useChatStream({ getConversationId, initialMessages, onTurnEnd });
+  const { messages, isStreaming, send, respond, stop } = useChatStream({ getConversationId, initialMessages, onTurnEnd });
 
   const lastQuestion = messages.findLast((m) => m.role === "user")?.content;
   const retry = () => lastQuestion && send(lastQuestion, modelId, { retry: true });
@@ -59,13 +59,13 @@ export function ChatView({ conversationId, title, initialMessages }: Props) {
           {messages.length === 0 ? (
             <EmptyState onPick={(text) => send(text, modelId)} />
           ) : (
-            <MessageList messages={messages} onRetry={retry} />
+            <MessageList messages={messages} onRetry={retry} onRespond={respond} isStreaming={isStreaming} />
           )}
         </div>
         <div className="sticky bottom-0 bg-gradient-to-t from-background from-70% pt-2 pb-4">
           <Composer isStreaming={isStreaming} disabled={modelId === null} onSend={(text) => send(text, modelId)} onStop={stop} />
           <p className="mt-2 text-center text-xs text-muted-foreground">
-            Atlas can make mistakes. Answers aren&apos;t based on company documents yet.
+            Atlas can make mistakes. Check the cited sources, and review every action before you approve it.
           </p>
         </div>
       </div>

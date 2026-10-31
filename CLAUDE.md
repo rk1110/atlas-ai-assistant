@@ -94,7 +94,7 @@ cd frontend && npm run dev                                  # frontend outside D
 
 | URL | What |
 | --- | --- |
-| http://localhost:3000 | Atlas web app (/knowledge, /graph, /analytics) |
+| http://localhost:3000 | Atlas web app (/knowledge, /graph, /analytics, /outbox) |
 | http://localhost:8000/docs | Backend API docs |
 | http://localhost:3001 | Langfuse (traces; login from `.env`) |
 | http://localhost:7474 | Neo4j browser (user `neo4j`, password `NEO4J_PASSWORD` from `.env`) |
@@ -106,7 +106,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | 1 | Foundation (app shell, streaming chat, gateway, tracing, eval scaffold) | Done (2026-10-29; exercise 3 solved by Claude at my request) |
 | 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | Built (checkpoints A–C, cited correct 90%); walkthrough written; quiz + exercises pending |
 | 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Built in one shot at my request (2026-10-30); walkthrough written; quiz + exercises pending (Phase 2's too) |
-| 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Not started |
+| 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Part A built (agent, 5 tools, approval cards, Outbox); part B next (memory, activity panel, agent evals) |
 | 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Not started |
 | 6 | Multimodal + voice | Not started |
 | 7 | Production-ready (guardrails, caching, routing, auth, cost dashboard, deploy) | Not started |

@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 from core.llm import ChatMessage, Completion, LLMGateway
 from core.model_catalog import ModelCatalog
 from core.prompts import PromptRegistry
+from core.tracing import Span
 
 Intent = Literal["question", "action_request", "chit_chat"]
 
@@ -40,7 +41,9 @@ class IntentClassifier:
         self._prompts = prompts
         self._catalog = catalog
 
-    async def classify(self, message: str, model_id: str | None = None) -> IntentResult:
+    async def classify(
+        self, message: str, model_id: str | None = None, *, trace: Span | None = None
+    ) -> IntentResult:
         """Classify with the catalog's *cheap* model by default: a label doesn't need the
         strongest model, and this runs on every message once Phase 4 routes on it."""
         prompt = self._prompts.render("classify_intent")
@@ -51,6 +54,7 @@ class IntentClassifier:
                 ChatMessage(role="user", content=message),
             ],
             IntentClassification,
+            trace=trace,
             name="classify_intent",
             prompt_ref=prompt.ref,
         )

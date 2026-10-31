@@ -1,0 +1,11 @@
+# Agent settings (Phase 4). Restart the backend after editing.
+
+# false = every message goes to the RAG chat, as in Phase 3.
+enabled: true
+
+# Messages the intent classifier labels as these go to the agent; everything else uses the
+# faster RAG path. Labels come from prompts/classify_intent.yaml.
+route_intents: [action_request]
+
+# Safety net against loops: the agent may call the model at most this many times per turn.
+max_model_calls: 6

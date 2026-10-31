@@ -23,21 +23,25 @@ CITATION_PATTERN = re.compile(r"[\[【](\d+(?:\s*,\s*\d+)*)(?:†[^\]】]*)?[\]�
 NO_SOURCES = "(No documents in the knowledge base matched this question.)"
 
 
-def format_sources(chunks: list[Chunk]) -> str:
+def format_sources(chunks: list[Chunk], start: int = 1) -> str:
     """The numbered sources block for the system prompt. Numbering starts at 1 because the
-    model will write these numbers in its answer, and [1] reads better than [0]."""
+    model will write these numbers in its answer, and [1] reads better than [0]. The agent
+    (Phase 4) passes `start` so numbers keep counting up across several searches."""
     if not chunks:
         return NO_SOURCES
     blocks = []
-    for number, chunk in enumerate(chunks, start=1):
-        heading = chunk.metadata.get("heading")
-        # Headings often start with the title (the page's own "# Title"); don't repeat it.
-        if not heading or heading.startswith(chunk.title):
-            label = heading or chunk.title
-        else:
-            label = f"{chunk.title} > {heading}"
-        blocks.append(f"[{number}] {label}\n{chunk.text.strip()}")
+    for number, chunk in enumerate(chunks, start=start):
+        blocks.append(f"[{number}] {source_label(chunk)}\n{chunk.text.strip()}")
     return "\n\n".join(blocks)
+
+
+def source_label(chunk: Chunk) -> str:
+    """'Title > Heading'. Headings often start with the title (the page's own "# Title");
+    don't repeat it."""
+    heading = chunk.metadata.get("heading")
+    if not heading or heading.startswith(chunk.title):
+        return heading or chunk.title
+    return f"{chunk.title} > {heading}"
 
 
 def cited_numbers(answer: str, source_count: int) -> list[int]:
