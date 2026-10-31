@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
+import { IntegrationList } from "@/components/settings/integration-list";
 import { MemoryList } from "@/components/settings/memory-list";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +24,14 @@ export default function SettingsPage() {
           Lasting facts picked up from your messages and recalled in later chats. Delete anything that&apos;s wrong.
         </p>
         <MemoryList />
+        <h2 className="mt-10 text-lg font-semibold">Connected tools (MCP)</h2>
+        <p className="text-sm text-muted-foreground">
+          MCP servers Atlas discovered at startup. Configured in <code className="font-mono text-xs">config/mcp.yaml</code>;
+          Atlas itself is also an MCP server (see <code className="font-mono text-xs">docs/mcp.md</code>).
+        </p>
+        <Suspense fallback={<Skeleton className="mt-4 h-40 w-full rounded-lg" />}>
+          <IntegrationList />
+        </Suspense>
         <h2 className="mt-10 text-lg font-semibold">Models</h2>
         <p className="text-sm text-muted-foreground">
           Configured in <code className="font-mono text-xs">config/models.yaml</code>. Pick one in the chat

@@ -65,7 +65,7 @@ Pin exact versions of all dependencies. Before adding any new library, tell me w
 ## Common commands (keep this section updated)
 
 ```bash
-docker compose up -d                       # start the full stack (9 services); `docker compose ps` = health
+docker compose up -d                       # start the full stack (11 services); `docker compose ps` = health
 docker compose logs -f backend             # follow backend logs
 docker compose restart backend             # after editing config/models.yaml or prompts/*.yaml
 docker compose up -d --build backend       # after changing backend dependencies (pyproject/uv.lock)
@@ -85,6 +85,7 @@ docker compose exec backend python -m scripts.smoke_llm     # one streamed reply
 docker compose exec backend python -m ingestion.run          # load data/ into the knowledge base (skips unchanged)
 docker compose exec backend python -m ingestion.run --force  # re-embed all (after changing config/rag.yaml)
 docker compose exec backend python -m graph.build            # extract Acme docs into Neo4j (skips unchanged; --force)
+docker compose exec -T backend python -m mcp_servers.atlas   # Atlas as an MCP server over stdio (Claude Desktop: docs/mcp.md)
 cd backend && uv run python -m scripts.fetch_gitlab_handbook # refresh data/gitlab at the pinned commit
 
 docker compose exec backend alembic revision --autogenerate --rev-id 000N -m "what"  # new migration (review it!)
@@ -100,6 +101,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | http://localhost:8000/docs | Backend API docs |
 | http://localhost:3001 | Langfuse (traces; login from `.env`) |
 | http://localhost:7474 | Neo4j browser (user `neo4j`, password `NEO4J_PASSWORD` from `.env`) |
+| http://localhost:8101/mcp, :8102/mcp | Simulated Jira / Slack MCP servers (MCP Inspector; see `docs/mcp.md`) |
 
 ## Phase status (update when a phase is done)
 
@@ -109,7 +111,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | 2 | Core RAG (ingestion, embeddings, pgvector, citations, Knowledge Base page) | Built (checkpoints A–C, cited correct 90%); walkthrough written; quiz + exercises pending |
 | 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Built in one shot at my request (2026-10-30); walkthrough written; quiz + exercises pending (Phase 2's too) |
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Built (2026-10-31; agent evals: routing 100%, actions 88%, unapproved writes 0); walkthrough + demo script written; quiz + exercises pending |
-| 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Part A built (4-agent team, animated graph; team 88% = single 88% at 2.5x calls); part B next (MCP) |
+| 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Built (2026-10-31; team 88% = single 88% at 2.5x calls; Jira/Slack via MCP; Atlas MCP server over stdio); Claude Desktop check, quiz + exercises pending |
 | 6 | Multimodal + voice | Not started |
 | 7 | Production-ready (guardrails, caching, routing, auth, cost dashboard, deploy) | Not started |
 | 8 | Fine-tune + launch (Ollama, LoRA, demo video, README) | Not started |

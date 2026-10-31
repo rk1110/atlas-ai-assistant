@@ -304,3 +304,17 @@ Retrieval-only (46 scored questions): vector 89% / 0.809 · keyword 91% / 0.767 
 | Animated agent graph (React Flow) in the Activity panel, derived from the saved timeline (`lib/agent-graph.ts`) | Handoffs visible live and in reopened chats, from one source of truth | A separate events stream for the graph |
 
 **Agent evals, single vs team** (gpt-oss-120b, 12 tasks): routing 100% / 100%; action accuracy 88% / 88% (team was 25% before the prompt v2s and the step cap); unapproved writes 0 / 0; model calls 2.5 / 6.1; latency 4.4 s / 10.0 s. Same accuracy at ~2.5x cost: the team buys verification and visible handoffs, not accuracy, on these tasks. `vpn-slack` fails in both modes (the model asks for details it was given): a model behaviour to fix with a lower temperature (Phase 4 exercise 2).
+
+## 2026-10-31 · Phase 5 part B: MCP
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Official MCP Python SDK `mcp` 2.3.0 (+ `jsonschema` 4.26.0 pinned explicitly; new transitive deps: `httpx2`, `mcp-types`, `pyjwt`, `sse-starlette`, `cryptography`) | Current major version; `MCPServer` (renamed from FastMCP), a unified `Client` that also connects in-process (tests) | `mcp` 1.30 (older API on httpx 0.x); hand-written JSON-RPC |
+| Simulated Jira and Slack as Streamable HTTP MCP servers in their own containers (`mcp-jira`, `mcp-slack`, same image as the backend); host check allows the Docker service names | Realistic separation (a real Jira MCP server would be another service); config change to swap | stdio subprocesses inside the backend; keep direct Python tools |
+| Atlas as an MCP client: discover tools at startup (retries), wrap each as `McpTool` (JSON Schema validation via `parse_arguments`), call the server per tool call; fall back to built-in simulated tools if a server is down | Agents see one `Tool` interface; tool names match the old ones, so prompts and evals didn't change | Long-lived sessions (state to manage); fail hard when a server is down |
+| Default-deny approval: every MCP tool needs approval unless `config/mcp.yaml` lists it under `read_only_tools`; server annotations are ignored for that decision | A server's "read-only" label is its own claim; the trust decision belongs to Atlas | Trust `readOnlyHint` annotations |
+| Atlas as an MCP server over stdio (`python -m mcp_servers.atlas`) with read-only tools only: `search_knowledge_base`, `query_org_chart`, `ask_atlas` | Claude Desktop launches local servers as commands; writes stay behind Atlas's approval UI | Expose write tools (bypasses approval); HTTP endpoint (auth needed) |
+| `Tool.definition()` / `json_schema()` became instance methods; `Tool.parse_arguments()` + `ToolArgumentError` | MCP tools get their name and schema at runtime, per instance | A Pydantic model generated from JSON Schema per MCP tool |
+| `team_writer@v2`: no [n] when there are no sources | Seen live: "[1] Action completed by the team" with no sources | — |
+
+**Verified:** both servers discovered over HTTP in Docker (4 tools); an approved agent ticket created through MCP (HR-1001); Atlas's MCP server over stdio via `docker compose exec` (as Claude Desktop does): tool list, search, and a cited `ask_atlas` answer. Claude Desktop itself not tested here (exercise 3). A test caught a bug: optional arguments the model leaves out (priority) broke the approval summary; defaults now come from the schema.

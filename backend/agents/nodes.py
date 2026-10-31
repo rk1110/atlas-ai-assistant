@@ -22,7 +22,7 @@ from pydantic import ValidationError
 
 from core.events import StreamEvent, ToolCallEvent
 from core.interfaces.retriever import Chunk
-from core.interfaces.tool import Tool, ToolResult
+from core.interfaces.tool import Tool, ToolArgumentError, ToolResult
 from core.llm import ChatMessage, ToolCall
 from services.grounding import format_sources, source_label
 
@@ -47,9 +47,9 @@ def make_tools_node(tools: list[Tool], key: str = "messages") -> Node:
                 messages.append(tool_message(call, ToolResult(ok=False, error="Unknown tool.")))
                 continue
             try:
-                args = tool.input_model.model_validate(call.arguments)
-            except ValidationError as exc:  # the model sees the error and can fix its call
-                result = ToolResult(ok=False, error=f"Invalid arguments: {first_error(exc)}")
+                args = tool.parse_arguments(call.arguments)
+            except ToolArgumentError as exc:  # the model sees the error and can fix its call
+                result = ToolResult(ok=False, error=f"Invalid arguments: {exc}")
                 await emit_call(call, tool, "failed", None, result.error)
                 messages.append(tool_message(call, result))
                 continue
@@ -108,9 +108,9 @@ def make_act_node(tools: list[Tool], key: str = "messages") -> Node:
                 messages.append(tool_message(call, ToolResult(ok=False, error=error)))
                 continue
             try:  # the human may have edited the arguments on the approval card
-                args = tool.input_model.model_validate(answer.get("args") or item["args"])
-            except ValidationError as exc:
-                error = f"The edited arguments were invalid ({first_error(exc)}). Not done."
+                args = tool.parse_arguments(answer.get("args") or item["args"])
+            except ToolArgumentError as exc:
+                error = f"The edited arguments were invalid ({exc}). Not done."
                 await emit_call(call, tool, "failed", item["summary"], error)
                 messages.append(tool_message(call, ToolResult(ok=False, error=error)))
                 continue

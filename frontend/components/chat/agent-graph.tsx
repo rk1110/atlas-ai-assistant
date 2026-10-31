@@ -25,7 +25,7 @@ const TEAM: Spec[] = [
   { id: "action", label: "Action", role: "tickets, Slack", icon: Send, x: 430, y: 240 },
   { id: "verifier", label: "Verifier", role: "checks answer", icon: CheckCheck, x: 210, y: 290 },
   { id: "tools", label: "Knowledge", role: "search, graph", icon: Wrench, x: 650, y: 0 },
-  { id: "systems", label: "Jira / Slack", role: "simulated", icon: Bot, x: 650, y: 190 },
+  { id: "systems", label: "Jira / Slack", role: "via MCP", icon: Bot, x: 650, y: 190 },
   { id: "you", label: "You", role: "approve", icon: Hand, x: 650, y: 300 },
 ];
 const TEAM_EDGES = [
@@ -40,7 +40,7 @@ const SINGLE: Spec[] = [
   { id: "router", label: "Router", role: "agent or RAG?", icon: Compass, x: 0, y: 120 },
   { id: "assistant", label: "Agent", role: "all tools", icon: Bot, x: 220, y: 120 },
   { id: "tools", label: "Knowledge", role: "search, graph", icon: Wrench, x: 440, y: 0 },
-  { id: "systems", label: "Jira / Slack", role: "simulated", icon: Send, x: 440, y: 140 },
+  { id: "systems", label: "Jira / Slack", role: "via MCP", icon: Send, x: 440, y: 140 },
   { id: "you", label: "You", role: "approve", icon: Hand, x: 440, y: 260 },
 ];
 const SINGLE_EDGES = ["memory>router", "router>assistant", "assistant>tools", "assistant>systems", "assistant>you"];

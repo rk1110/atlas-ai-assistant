@@ -192,10 +192,15 @@ services:
     build:
       context: .            # repo root, so the image can include prompts/ and config/
       dockerfile: backend/Dockerfile
+    image: atlas-backend:dev  # also runs the MCP servers below (same code, other entry points)
     restart: unless-stopped
     depends_on:
       postgres: { condition: service_healthy }
       redis: { condition: service_healthy }
+      # Started first so Atlas can discover their tools at startup (Phase 5). If one is down,
+      # Atlas still starts and uses its built-in simulated tools instead.
+      mcp-jira: { condition: service_started }
+      mcp-slack: { condition: service_started }
       # Deliberately NOT waiting for Langfuse: tracing must never block the app from starting.
     # Only the variables the backend needs (not Langfuse's server secrets) — least privilege.
     environment:
@@ -238,6 +243,45 @@ services:
       timeout: 5s
       retries: 6
       start_period: 10s
+
+  # ---------- MCP servers (Phase 5): simulated Acme Jira and Slack ----------
+  # Same image as the backend, different entry point. They only write to the simulated
+  # tables in Postgres (the Outbox page). Reachable from Atlas as http://mcp-jira:8101/mcp.
+  mcp-jira:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: atlas-backend:dev
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    command: ["python", "-m", "mcp_servers.jira"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set in .env}
+      MCP_SERVICE_HOST: mcp-jira
+    ports:
+      - "127.0.0.1:8101:8101" # for the MCP Inspector on your Mac
+    volumes:
+      - ./backend:/app/backend
+      - ./config:/app/config
+
+  mcp-slack:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    image: atlas-backend:dev
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    command: ["python", "-m", "mcp_servers.slack"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set in .env}
+      MCP_SERVICE_HOST: mcp-slack
+    ports:
+      - "127.0.0.1:8102:8102"
+    volumes:
+      - ./backend:/app/backend
+      - ./config:/app/config
 
   frontend:
     build: ./frontend

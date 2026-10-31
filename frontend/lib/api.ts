@@ -43,6 +43,14 @@ export interface ActivityEntry {
   event: AgentStepEvent | ToolCallEvent | ApprovalRequestEvent;
 }
 
+/** An MCP server Atlas uses, and the tools it offers (Phase 5, api/integrations.py). */
+export interface Integration {
+  name: string;
+  url: string;
+  status: string; // "connected", "unreachable: …", "not tried"
+  tools: { name: string; description: string; requires_approval: boolean }[];
+}
+
 /** A fact Atlas remembers about the user (Phase 4, services/memory.py). */
 export interface Memory {
   id: string;
@@ -330,6 +338,7 @@ export const api = {
   analytics: () => request<Analytics>("/api/analytics"),
   outbox: () => request<Outbox>("/api/outbox"),
   memories: () => request<Memory[]>("/api/memories"),
+  integrations: () => request<Integration[]>("/api/integrations"),
   forgetMemory: (id: string) => request<void>(`/api/memories/${id}`, { method: "DELETE" }),
 };
 

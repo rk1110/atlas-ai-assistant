@@ -182,8 +182,8 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 <div class="wrap">
   <header class="head">
     <div class="fix">
-      <span>Position: <b>Phase 5A built: 4-agent team, animated agent graph</b></span>
-      <span>Next: <b>Phase 5B: MCP (Jira/Slack servers, Atlas as an MCP server)</b></span>
+      <span>Position: <b>Phase 5 built: agent team + MCP (ready for Demo 2)</b></span>
+      <span>Next: <b>Learning sessions for Phases 2–5</b></span>
       <span>Updated <b>2026-10-31</b></span>
     </div>
     <h1>Atlas Map</h1>
@@ -326,6 +326,9 @@ const NODES = {
   neo4j:    { layer: "Data", name: "Neo4j graph", file: "backend/graph/ (python -m graph.build) · localhost:7474", status: "built",
               what: "71 entities and 134 relations an LLM extracted from the Acme docs: who leads which team, which team owns which policy. Each relation keeps its source sentence.",
               concept: "<strong>GraphRAG.</strong> Multi-hop questions become a lookup: walk two links instead of hoping one passage holds both facts." },
+  mcp:      { layer: "Providers", name: "MCP servers", file: "mcp_servers/ (jira, slack, atlas) + config/mcp.yaml", status: "built",
+              what: "Jira and Slack run as MCP servers that Atlas discovers at startup. Atlas is also an MCP server, so Claude Desktop can search its knowledge base (read-only).",
+              concept: "<strong>MCP.</strong> One protocol for AI tools: write a tool once as a server, any client can use it. Atlas still decides what needs approval." },
   redis:    { layer: "Data", name: "Redis", file: "cache + job queue", status: "later",
               what: "Used by Langfuse today. Atlas uses it for ingestion jobs (Phase 2) and semantic caching (Phase 7).",
               concept: "<strong>Cache.</strong> Answer repeated questions without paying for another model call." },
@@ -392,7 +395,7 @@ const CHECKPOINTS = [
   { name: "Phase 4 · part A", status: "built", items: ["LangGraph agent, 5 tools, approval cards", "Simulated Jira/Slack + Outbox page"] },
   { name: "Phase 4 · part B", status: "built", items: ["Short- and long-term memory, Settings list", "Activity panel; agent evals: routing 100%, actions 88%, 0 unapproved writes"] },
   { name: "Phase 5 · part A", status: "built", items: ["Planner, Researcher, Action, Verifier", "Animated agent graph; team 88% at 2.5x calls"] },
-  { name: "Phase 5 · part B", status: "next", items: ["Jira + Slack as MCP servers", "Atlas as an MCP server (Claude Desktop)"] },
+  { name: "Phase 5 · part B", status: "built", items: ["Jira + Slack as MCP servers, default-deny approvals", "Atlas as a read-only MCP server (stdio)"] },
 ];
 
 const PHASES = [

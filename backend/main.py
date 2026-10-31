@@ -21,6 +21,7 @@ from api import (
     classify,
     conversations,
     graph,
+    integrations,
     knowledge,
     memory,
     models,
@@ -29,9 +30,11 @@ from api import (
 from api.deps import SessionDep, get_settings
 from core.embeddings import get_embedder
 from core.tracing import get_tracer
+from integrations.mcp_tools import get_mcp_config, get_mcp_registry
 
 # Show our own INFO logs (uvicorn only configures its own loggers).
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+logging.getLogger("httpx2").setLevel(logging.WARNING)  # MCP client: one INFO line per request
 logger = logging.getLogger(__name__)
 
 
@@ -41,10 +44,12 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
     Startup: load the embedding model in the background (a few seconds), so the first chat
     question doesn't pay for it. In the background, not awaited, so the API is up at once.
-    Opens the agent's Postgres checkpointer (Phase 4) for the app's lifetime.
+    Opens the agent's Postgres checkpointer (Phase 4) for the app's lifetime, and discovers
+    the MCP servers' tools (Phase 5; a few seconds at most if a server is still starting).
     Shutdown: flush buffered traces so the last requests still show up in Langfuse.
     """
     warm_up = asyncio.create_task(_warm_up_embedder())
+    await get_mcp_registry().connect(get_mcp_config())
     async with postgres_checkpointer():
         yield
     warm_up.cancel()
@@ -74,6 +79,7 @@ app.include_router(chat.router)
 app.include_router(classify.router)
 app.include_router(conversations.router)
 app.include_router(graph.router)
+app.include_router(integrations.router)
 app.include_router(knowledge.router)
 app.include_router(memory.router)
 app.include_router(models.router)

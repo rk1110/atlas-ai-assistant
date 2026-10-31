@@ -18,7 +18,7 @@ MCP-backed tools (Phase 5) are adapters that implement this same class.
 from abc import ABC, abstractmethod
 from typing import Any, ClassVar
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 
 class ToolResult(BaseModel):
@@ -28,6 +28,10 @@ class ToolResult(BaseModel):
     ok: bool
     output: Any = None
     error: str | None = None
+
+
+class ToolArgumentError(Exception):
+    """The model's arguments don't match the tool's schema. The message goes back to the model."""
 
 
 class Tool[InputT: BaseModel](ABC):
@@ -52,22 +56,31 @@ class Tool[InputT: BaseModel](ABC):
     # The agent must emit an `approval_request` event and wait for a human "yes" first.
     requires_approval: ClassVar[bool] = False
 
-    @classmethod
-    def json_schema(cls) -> dict[str, Any]:
+    def json_schema(self) -> dict[str, Any]:
         """The input schema sent to the model in the tool definition."""
-        return cls.input_model.model_json_schema()
+        return self.input_model.model_json_schema()
 
-    @classmethod
-    def definition(cls) -> dict[str, Any]:
+    def definition(self) -> dict[str, Any]:
         """The tool as the model sees it (OpenAI function format; LiteLLM converts it)."""
         return {
             "type": "function",
             "function": {
-                "name": cls.name,
-                "description": cls.description,
-                "parameters": cls.json_schema(),
+                "name": self.name,
+                "description": self.description,
+                "parameters": self.json_schema(),
             },
         }
+
+    def parse_arguments(self, arguments: dict[str, Any]) -> InputT:
+        """Validate the model's arguments. Raises ToolArgumentError with a short, model-readable
+        reason. MCP tools (Phase 5) override this: their schema is JSON Schema, not Pydantic."""
+        try:
+            return self.input_model.model_validate(arguments)  # type: ignore[return-value]
+        except ValidationError as exc:
+            err = exc.errors()[0]
+            location = ".".join(str(p) for p in err["loc"])
+            reason = f"{location}: {err['msg']}" if location else err["msg"]
+            raise ToolArgumentError(reason) from exc
 
     def describe_call(self, args: InputT) -> str:
         """One line for a human, e.g. on the approval card: what exactly will happen."""

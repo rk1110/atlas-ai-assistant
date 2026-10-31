@@ -1,0 +1,22 @@
+# MCP servers Atlas uses as tool providers (Phase 5). Restart the backend after editing.
+#
+# Atlas discovers each server's tools at startup and wraps them as agent tools.
+# SAFETY: every MCP tool needs human approval unless it is listed in read_only_tools.
+# Servers can label their own tools "read-only", but that label is the server's claim;
+# the decision is ours, in this file (default-deny).
+
+enabled: true
+
+servers:
+  - name: jira
+    url: http://mcp-jira:8101/mcp
+    read_only_tools: [list_tickets]
+    # How each write looks on the approval card ({argument} placeholders).
+    summaries:
+      create_ticket: "Create a {priority}-priority {project} ticket: “{summary}”"
+
+  - name: slack
+    url: http://mcp-slack:8102/mcp
+    read_only_tools: [list_channels]
+    summaries:
+      post_slack_message: "Post to {channel}: “{text}”"

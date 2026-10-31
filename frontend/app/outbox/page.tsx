@@ -17,8 +17,8 @@ export default async function OutboxPage() {
       <PageHeader title="Outbox" />
       <div className="mx-auto flex w-full max-w-4xl flex-col gap-8 px-4 py-6">
         <p className="text-sm text-muted-foreground">
-          Actions the agent took after your approval. Jira and Slack are <strong>simulated</strong> here: nothing leaves
-          Atlas. Phase 5 connects them through MCP servers.
+          Actions the agent took after your approval. Jira and Slack are <strong>simulated</strong>: Atlas reaches them
+          through their own MCP servers (<code>mcp-jira</code>, <code>mcp-slack</code>), exactly as it would real ones.
         </p>
         <section className="flex flex-col gap-3">
           <h2 className="text-sm font-medium">Jira tickets ({tickets.length})</h2>
