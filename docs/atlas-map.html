@@ -182,8 +182,8 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 <div class="wrap">
   <header class="head">
     <div class="fix">
-      <span>Position: <b>Phase 4A built: agent, tools, approval cards</b></span>
-      <span>Next: <b>Phase 4B: memory, agent activity panel, agent evals</b></span>
+      <span>Position: <b>Phase 4 built: agent, approvals, memory, activity panel</b></span>
+      <span>Next: <b>Phase 5: multi-agent team + MCP (two parts)</b></span>
       <span>Updated <b>2026-10-31</b></span>
     </div>
     <h1>Atlas Map</h1>
@@ -270,6 +270,9 @@ const NODES = {
   agent:    { layer: "Service", name: "Agent (LangGraph)", file: "backend/agents/ + tools/ + config/agent.yaml", status: "built",
               what: "For action requests: a loop of think → use tools → think. Read tools (search, org chart, calculator) run at once; write tools (Jira ticket, Slack post) pause for your approval.",
               concept: "<strong>Human in the loop.</strong> The graph pauses (interrupt), its state is saved in Postgres, and your Approve click resumes it. Nothing is written before you say yes." },
+  memory:   { layer: "Service", name: "Memory", file: "backend/services/memory.py + config/memory.yaml", status: "built",
+              what: "Long-term: facts about you, extracted in the background, embedded, recalled into prompts (see and delete them in Settings). Short-term: older messages folded into a running summary.",
+              concept: "<strong>Memory is prompt content.</strong> The model API remembers nothing; memory is whatever we store and put back, chosen by similarity like documents." },
   rewriter: { layer: "Service", name: "Query rewriter", file: "backend/services/query_rewriter.py + prompts/query_rewrite.yaml", status: "built",
               what: "For follow-ups only, the cheap model turns 'who do I ask about it?' into 'Who do I ask about parental leave?' before searching.",
               concept: "<strong>Query rewriting.</strong> Search only sees the words it's given. Follow-up correctness went from 42% to 83%." },
@@ -387,7 +390,7 @@ const CHECKPOINTS = [
   { name: "Phase 3 · graph", status: "built", items: ["Neo4j GraphRAG: 71 entities, 134 relations", "Graph explorer page"] },
   { name: "Phase 3 · evals", status: "built", items: ["50 questions, LLM judge, CI retrieval gate", "Embedding map, Analytics; quiz + exercises pending"] },
   { name: "Phase 4 · part A", status: "built", items: ["LangGraph agent, 5 tools, approval cards", "Simulated Jira/Slack + Outbox page"] },
-  { name: "Phase 4 · part B", status: "next", items: ["Short- and long-term memory", "Agent activity panel, agent evals"] },
+  { name: "Phase 4 · part B", status: "built", items: ["Short- and long-term memory, Settings list", "Activity panel; agent evals: routing 100%, actions 88%, 0 unapproved writes"] },
 ];
 
 const PHASES = [

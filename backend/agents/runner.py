@@ -52,10 +52,12 @@ class AgentRunner:
         model_id: str,
         messages: list[ChatMessage],
         trace: Span | None,
+        memory: str = "(nothing yet)",
     ) -> AsyncIterator[StreamEvent | AgentOutcome]:
         initial = {
             "conversation_id": conversation_id,
             "model_id": model_id,
+            "memory": memory,
             "messages": [m.model_dump() for m in messages],
             "sources": [],
             "pending": [],

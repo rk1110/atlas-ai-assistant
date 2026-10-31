@@ -17,6 +17,7 @@ export function toChatMessage(m: StoredMessage): ChatMessage {
     steps: m.agent?.steps ?? [], // agent answers save their steps; Phase 3 rewrites aren't saved
     toolCalls: m.agent?.tool_calls ?? [],
     approvals: m.agent?.approvals ?? [],
+    activity: m.agent?.timeline ?? [],
     usage:
       m.input_tokens !== null && m.output_tokens !== null && m.latency_ms !== null && m.model_id
         ? {

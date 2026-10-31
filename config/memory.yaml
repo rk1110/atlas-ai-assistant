@@ -1,0 +1,14 @@
+# Memory settings (Phase 4). Restart the backend after editing.
+
+short_term:
+  # The newest messages are sent to the model word for word; older ones are folded into a
+  # running summary (one cheap-model call each time KEEP more messages pile up).
+  keep_last_messages: 10
+
+long_term:
+  # After each turn, the cheap model looks for lasting facts about the user ("works in the
+  # Pune office") and stores them with an embedding. They're recalled into later prompts.
+  enabled: true
+  recall_top_k: 5
+  # A new fact this similar (cosine) to a stored one counts as a duplicate and isn't saved.
+  duplicate_similarity: 0.9

@@ -275,3 +275,17 @@ Retrieval-only (46 scored questions): vector 89% / 0.809 · keyword 91% / 0.767 
 | Simulated Jira/Slack: `sim_tickets`, `sim_slack_messages` (migration 0007) + an Outbox page | No real company systems touched in development; the approve-then-act flow is real | Real Jira/Slack sandboxes (credentials, flaky demos) |
 | Agent answers aren't token-streamed: the decision call returns whole text, sent as small token events | Tool-calling replies must be complete before acting; same event contract as RAG | Streaming tool-call deltas (more complex parsing for little gain) |
 | New `ToolCallEvent.summary` (optional) mirrored in `events.ts` | Humans read "Create a high-priority IT ticket: …", not JSON; optional = non-breaking | Build summaries in the frontend per tool |
+
+## 2026-10-31 · Phase 4 part B: memory, activity panel, agent evals
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Short-term memory: newest 10 messages verbatim + a running summary (cheap model) stored on the conversation, folded in batches of 10 (migration 0009, `config/memory.yaml`) | Fixed prompt size for long chats; one summary call per 10 messages, not per turn | Sliding window only (forgets early facts); summarise every turn (cost, latency) |
+| Long-term memory: after each turn a background task extracts lasting user facts (cheap model, structured output), embeds them with BGE, skips near-duplicates (cosine ≥ 0.9); top 5 recalled per message into `$memory` | Facts survive across conversations; the answer never waits for extraction | Store whole conversations as memory (noisy); a separate memory service (Mem0, Zep: new dependency) |
+| Memories are listed and deletable in Settings (`/api/memories`) | The user's data; a wrong fact would silently shape every answer | Invisible memory |
+| Single-user memory for now | No login until Phase 7, which adds `user_id` | Fake per-browser ids |
+| Prompts: `chat_system@v4` and `agent_system@v2` add `$memory`; `agent_system@v3` adds "act when the request has what the action needs" after an eval miss | Prompt changes are versioned and tied to an eval result | Edit v2 in place (old traces would lie) |
+| Agent log gets a timestamped `timeline`; the Agent Activity Panel (chat header) shows memory, routing, thinking steps, tool calls with input/output, approvals | Every agent step visible live (the Phase 4 UI goal); saved, so it survives reloads | Only Langfuse (not visible to users) |
+| Agent evals (`evals/agent_tasks.yaml`, `python -m evals.agent_run`): routing accuracy, action accuracy (tool + key args), and an approval gate checked with spy write tools that fail the run if called; every proposal is rejected | Safety is tested, not assumed; nothing is ever written during evals | Judge the final answer text only; LLM-judged action quality (later) |
+
+**Agent eval results** (gpt-oss-120b, 12 tasks): routing 100%, action accuracy 88% (7/8), unapproved writes 0, ~2.5 model calls and ~3.9 s per action. The miss (`vpn-slack`: asked a clarifying question instead of posting) persisted after `agent_system@v3`, then passed 3/3 when re-run alone: temperature 0.7 makes agent decisions vary. Next fix: a lower temperature for the agent only (Phase 4 exercise 2).

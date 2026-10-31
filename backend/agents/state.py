@@ -15,6 +15,7 @@ from core.tracing import Span
 class GraphState(TypedDict):
     conversation_id: str  # checked on resume: an approval only works in its own chat
     model_id: str
+    memory: str  # the $memory block: user facts + summary of the older conversation
     # `Annotated[..., operator.add]` = a reducer: a node returning {"messages": [m]}
     # APPENDS m instead of replacing the list. That is how nodes add to shared history.
     messages: Annotated[list[dict[str, Any]], operator.add]  # ChatMessage dumps, no system

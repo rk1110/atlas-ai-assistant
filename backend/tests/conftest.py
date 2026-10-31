@@ -62,8 +62,8 @@ async def db() -> None:
     async with get_session_factory()() as session:
         await session.execute(
             text(
-                "TRUNCATE conversations, messages, eval_runs, eval_results, documents, chunks"
-                " CASCADE"
+                "TRUNCATE conversations, messages, eval_runs, eval_results, documents, chunks,"
+                " memories, sim_tickets, sim_slack_messages CASCADE"
             )
         )
         await session.commit()

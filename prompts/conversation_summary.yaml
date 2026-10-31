@@ -1,0 +1,25 @@
+# Short-term memory: a running summary of the older part of a conversation (Phase 4).
+# Used by backend/services/memory.py when a chat grows past keep_last_messages.
+
+name: conversation_summary
+description: Fold older messages into a running summary of the conversation.
+active: v1
+
+versions:
+  v1:
+    created: 2026-10-31
+    notes: Phase 4 baseline. Keeps facts, decisions, open questions and actions (ticket keys).
+    variables: [previous_summary, messages]
+    template: |
+      Update the running summary of a conversation between a user and a company assistant.
+
+      Keep: facts the user gave, answers that were given (with numbers), decisions, actions taken (ticket keys,
+      Slack posts) and anything still open. Drop greetings and filler. At most 150 words, plain sentences.
+
+      Summary so far:
+      $previous_summary
+
+      New messages to fold in:
+      $messages
+
+      Updated summary:

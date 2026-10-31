@@ -5,6 +5,7 @@ Add each new model module here, or Alembic won't see its table."""
 from models.conversation import Conversation
 from models.document import TEXT_SEARCH_CONFIG, ChunkRecord, DocumentRecord, search_vector
 from models.eval import EvalResult, EvalRun
+from models.memory import MemoryRecord
 from models.message import Message
 from models.simulated import SimSlackMessage, SimTicket
 
@@ -15,6 +16,7 @@ __all__ = [
     "DocumentRecord",
     "EvalResult",
     "EvalRun",
+    "MemoryRecord",
     "Message",
     "SimSlackMessage",
     "SimTicket",

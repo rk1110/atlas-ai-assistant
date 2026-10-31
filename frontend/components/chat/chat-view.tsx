@@ -4,6 +4,7 @@ import { MotionConfig } from "motion/react";
 import { useRouter } from "next/navigation";
 import { useCallback, useRef, useState } from "react";
 
+import { ActivityPanel } from "@/components/chat/activity-panel";
 import { Composer } from "@/components/chat/composer";
 import { EmptyState } from "@/components/chat/empty-state";
 import { MessageList } from "@/components/chat/message-list";
@@ -52,6 +53,7 @@ export function ChatView({ conversationId, title, initialMessages }: Props) {
   return (
     <MotionConfig reducedMotion="user">
       <PageHeader title={title}>
+        <ActivityPanel messages={messages} />
         <ModelSwitcher value={modelId} onChange={setModelId} disabled={isStreaming} />
       </PageHeader>
       <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col px-4">

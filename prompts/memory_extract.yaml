@@ -1,0 +1,28 @@
+# Long-term memory extraction (Phase 4). Used by backend/services/memory.py.
+# The JSON shape comes from the Pydantic schema (a list of facts).
+
+name: memory_extract
+description: Pull lasting facts about the user out of one message.
+active: v1
+
+versions:
+  v1:
+    created: 2026-10-31
+    notes: Phase 4 baseline. Most messages contain no such fact; the empty list is the common answer.
+    variables: [message]
+    template: |
+      You maintain a short memory about the user of a company assistant. Read the user's message and list
+      facts about THE USER that will still be true and useful in future conversations: their role, team,
+      office or location, manager, devices, working pattern, ongoing projects, or stated preferences.
+
+      Rules:
+      - Write each fact as a short sentence in the third person, e.g. "Works in the Pune office."
+      - Only facts the user states about themselves. Not questions, not company policy, not guesses.
+      - Skip temporary things (today's mood, a one-off request) and anything sensitive (health details,
+        passwords, personal identifiers).
+      - Most messages contain no such fact: then return an empty list.
+
+      User message:
+      <message>
+      $message
+      </message>

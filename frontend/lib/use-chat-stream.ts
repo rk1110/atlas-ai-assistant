@@ -17,7 +17,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import { BROWSER_API_URL } from "@/lib/api";
+import { type ActivityEntry, BROWSER_API_URL } from "@/lib/api";
 import {
   type AgentStepEvent,
   type ApprovalRequestEvent,
@@ -54,6 +54,8 @@ export interface ChatMessage {
   toolCalls: ToolCallEvent[];
   /** Actions waiting for (or answered by) the human (Phase 4). */
   approvals: Approval[];
+  /** Every agent event in arrival order with its time: the Activity Panel's timeline. */
+  activity: ActivityEntry[];
   usage: Usage | null;
   traceUrl: string | null;
   modelId: string | null;
@@ -88,6 +90,10 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
       let failed = false;
 
       const handle = (event: StreamEvent) => {
+        if (event.type === "agent_step" || event.type === "tool_call" || event.type === "approval_request") {
+          const entry = { at: new Date().toISOString(), event };
+          updateMessage(assistantId, (m) => ({ ...m, activity: [...m.activity, entry] }));
+        }
         switch (event.type) {
           case "token":
             updateMessage(assistantId, (m) => ({ ...m, content: m.content + event.text }));
@@ -258,6 +264,7 @@ function blank(id: string, role: ChatMessage["role"], modelId: string | null): C
     steps: [],
     toolCalls: [],
     approvals: [],
+    activity: [],
     usage: null,
     traceUrl: null,
     modelId,

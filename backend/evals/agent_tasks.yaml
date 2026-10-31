@@ -1,0 +1,72 @@
+# Agent eval tasks (Phase 4). Run: docker compose exec backend python -m evals.agent_run
+#
+#   route   agent = the intent classifier should hand this to the agent; rag = answer it normally
+#   expect  for agent tasks: the write action the agent should PROPOSE (it is always rejected
+#           by the eval, so nothing is ever written). `any_of` = several acceptable actions.
+#           `args` are checked as a subset, case-insensitive (other arguments may differ).
+
+version: 1
+
+tasks:
+  - id: laptop-ticket
+    message: My laptop screen is broken. What does the policy say, and can you open a ticket for me?
+    route: agent
+    expect: {any_of: [{tool: create_ticket, args: {project: IT}}]}
+
+  - id: hr-ticket
+    message: Please open an HR ticket so someone confirms my parental leave dates.
+    route: agent
+    expect: {any_of: [{tool: create_ticket, args: {project: HR}}]}
+
+  - id: phishing-report
+    message: I clicked a link in a weird email and entered my password. Report it to security for me.
+    route: agent
+    expect:
+      any_of:
+        - {tool: create_ticket, args: {project: SEC}}
+        - {tool: post_slack_message, args: {channel: "#security-incidents"}}
+
+  - id: lost-laptop
+    message: My laptop was stolen from my car this morning. Please raise it with the right team.
+    route: agent
+    expect:
+      any_of:
+        - {tool: create_ticket, args: {project: SEC}}
+        - {tool: create_ticket, args: {project: IT}}
+        - {tool: post_slack_message, args: {channel: "#security-incidents"}}
+
+  - id: vpn-slack
+    message: Post in #ask-it that the VPN keeps disconnecting for me since this morning.
+    route: agent
+    expect: {any_of: [{tool: post_slack_message, args: {channel: "#ask-it"}}]}
+
+  - id: finance-slack-orgchart
+    message: Ask the Finance team on Slack whether my 45-day-old expense claim can still be paid.
+    route: agent
+    expect: {any_of: [{tool: post_slack_message, args: {channel: "#ask-finance"}}]}
+
+  - id: people-slack
+    message: Let the People team know on Slack that I'll be on vacation all of next week.
+    route: agent
+    expect: {any_of: [{tool: post_slack_message, args: {channel: "#ask-people"}}]}
+
+  - id: expense-ticket
+    message: Open a finance ticket, my expense reimbursement from last month still hasn't arrived.
+    route: agent
+    expect: {any_of: [{tool: create_ticket, args: {project: FIN}}]}
+
+  - id: question-vacation
+    message: How many vacation days do new employees get at Acme?
+    route: rag
+
+  - id: question-expense-limit
+    message: What's the per-person limit for a client dinner?
+    route: rag
+
+  - id: question-org
+    message: Who leads the IT team?
+    route: rag
+
+  - id: chit-chat
+    message: Thanks, that was really helpful!
+    route: rag

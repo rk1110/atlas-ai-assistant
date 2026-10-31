@@ -4,6 +4,7 @@ import { Suspense } from "react";
 
 import { PageHeader } from "@/components/page-header";
 import { PagePlaceholder } from "@/components/page-placeholder";
+import { MemoryList } from "@/components/settings/memory-list";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, type ModelsResponse } from "@/lib/api";
@@ -17,7 +18,12 @@ export default function SettingsPage() {
     <>
       <PageHeader title="Settings" />
       <div className="mx-auto w-full max-w-2xl px-4 pt-12">
-        <h2 className="text-lg font-semibold">Models</h2>
+        <h2 className="text-lg font-semibold">What Atlas remembers</h2>
+        <p className="text-sm text-muted-foreground">
+          Lasting facts picked up from your messages and recalled in later chats. Delete anything that&apos;s wrong.
+        </p>
+        <MemoryList />
+        <h2 className="mt-10 text-lg font-semibold">Models</h2>
         <p className="text-sm text-muted-foreground">
           Configured in <code className="font-mono text-xs">config/models.yaml</code>. Pick one in the chat
           header.

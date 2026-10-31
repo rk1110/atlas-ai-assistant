@@ -4,7 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, String, func
+from sqlalchemy import DateTime, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from core.db import Base
@@ -26,6 +26,11 @@ class Conversation(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), index=True
     )
+
+    # Short-term memory (Phase 4): a running summary of the older messages, and how many
+    # messages it already covers (so only new ones are folded in next time).
+    summary: Mapped[str | None] = mapped_column(Text)
+    summarized_count: Mapped[int] = mapped_column(default=0, server_default="0")
 
     messages: Mapped[list["Message"]] = relationship(
         back_populates="conversation",

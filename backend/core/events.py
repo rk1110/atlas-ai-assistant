@@ -14,6 +14,7 @@ union*: Pydantic (and TypeScript, on the frontend) look at `type` to know which 
 rest of the JSON has.
 """
 
+from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, TypeAdapter
@@ -133,6 +134,11 @@ class ApprovalRecord(ApprovalRequestEvent):
     state: Literal["pending", "approved", "rejected"] = "pending"
 
 
+class TimelineEntry(BaseModel):
+    at: datetime
+    event: AgentStepEvent | ToolCallEvent | ApprovalRequestEvent
+
+
 class AgentLog(BaseModel):
     """What the agent did in one answer, saved on the message (Phase 4), so a reloaded or
     reopened chat shows the same steps, tool calls and approval cards. Not a stream event:
@@ -141,8 +147,12 @@ class AgentLog(BaseModel):
     steps: list[AgentStepEvent] = Field(default_factory=list)
     tool_calls: list[ToolCallEvent] = Field(default_factory=list)
     approvals: list[ApprovalRecord] = Field(default_factory=list)
+    # Every event in arrival order with its time: the Agent Activity Panel's timeline.
+    timeline: list[TimelineEntry] = Field(default_factory=list)
 
     def record(self, event: "StreamEvent") -> None:
+        if isinstance(event, AgentStepEvent | ToolCallEvent | ApprovalRequestEvent):
+            self.timeline.append(TimelineEntry(at=datetime.now(UTC), event=event))
         if isinstance(event, AgentStepEvent):
             self.steps = [s for s in self.steps if s.step_id != event.step_id] + [event]
         elif isinstance(event, ToolCallEvent):

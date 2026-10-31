@@ -22,6 +22,7 @@ from core.db import get_session, get_session_factory
 from core.embeddings import get_embedder
 from core.interfaces.retriever import Retriever
 from core.llm import LLMGateway
+from core.memory_config import get_memory_config
 from core.model_catalog import ModelCatalog
 from core.prompts import PromptRegistry
 from core.rag_config import RagConfig, get_rag_config
@@ -33,6 +34,7 @@ from retrieval import build_retriever, get_retriever
 from services.chat_service import ChatService
 from services.embedding_map import EmbeddingMapService
 from services.intent import IntentClassifier
+from services.memory import ConversationSummarizer, LongTermMemory
 from services.query_rewriter import QueryRewriter
 from simulated.store import SimulatedJira, SimulatedSlack
 from tools import get_tools
@@ -74,7 +76,28 @@ def make_chat_service(retriever: Retriever | None = None, *, rewrite: bool = Tru
         get_classifier(),
         get_agent_runner(),
         get_agent_config(),
+        get_long_term_memory(),
+        get_summarizer(),
+        get_memory_config(),
     )
+
+
+@lru_cache
+def get_long_term_memory() -> LongTermMemory:
+    """Facts about the user (Phase 4), extracted and recalled with the cheap model + BGE."""
+    return LongTermMemory(
+        get_gateway(),
+        get_prompts(),
+        get_embedder(),
+        get_session_factory(),
+        get_catalog().defaults.cheap,
+        get_memory_config().long_term,
+    )
+
+
+@lru_cache
+def get_summarizer() -> ConversationSummarizer:
+    return ConversationSummarizer(get_gateway(), get_prompts(), get_catalog().defaults.cheap)
 
 
 @lru_cache
@@ -145,6 +168,7 @@ ClassifierDep = Annotated[IntentClassifier, Depends(get_classifier)]
 RagConfigDep = Annotated[RagConfig, Depends(get_rag_config)]
 RetrieverDep = Annotated[Retriever, Depends(get_retriever)]
 RetrieverBuilderDep = Annotated[Callable[..., Retriever], Depends(get_retriever_builder)]
+MemoryDep = Annotated[LongTermMemory, Depends(get_long_term_memory)]
 JiraDep = Annotated[SimulatedJira, Depends(get_jira)]
 SlackDep = Annotated[SimulatedSlack, Depends(get_slack)]
 GraphStoreDep = Annotated[GraphStore | None, Depends(get_graph_store)]

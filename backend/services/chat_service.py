@@ -50,11 +50,13 @@ from core.events import (
 )
 from core.interfaces.retriever import Chunk, Retriever
 from core.llm import ChatMessage, Completion, LLMError, LLMGateway, TextDelta
+from core.memory_config import MemoryConfig
 from core.prompts import PromptRegistry, RenderedPrompt
 from core.tracing import Span, Tracer
 from models import Conversation, Message
 from services.grounding import citations_for, format_sources
 from services.intent import IntentClassifier
+from services.memory import NO_MEMORY, ConversationSummarizer, LongTermMemory, format_memory
 from services.query_rewriter import QueryRewriter
 
 logger = logging.getLogger(__name__)
@@ -111,6 +113,9 @@ class ChatService:
         router: IntentClassifier | None = None,
         agent: AgentRunner | None = None,
         agent_config: AgentConfig | None = None,
+        memory: LongTermMemory | None = None,
+        summarizer: ConversationSummarizer | None = None,
+        memory_config: MemoryConfig | None = None,
     ):
         self._gateway = gateway
         self._retriever = retriever
@@ -120,6 +125,11 @@ class ChatService:
         self._router = router
         self._agent = agent
         self._agent_config = agent_config or AgentConfig()
+        # Phase 4 memory: None = Phase 3 behaviour (last N messages, no user facts).
+        self._memory = memory
+        self._summarizer = summarizer
+        self._memory_config = memory_config or MemoryConfig()
+        self._background: set[asyncio.Task[object]] = set()  # keeps memory tasks alive
         self._prompts = prompts
         self._settings = settings
         self._session_factory = session_factory
@@ -169,18 +179,34 @@ class ChatService:
                 )
             conversation.updated_at = func.now()
             await session.commit()
-            history = await self._load_history(session, conversation.id)
+        history, summary = await self._history_and_summary(request.conversation_id, trace)
+        self._remember_later(request.message, request.conversation_id)
+        log = AgentLog()  # what this turn did, saved with an agent answer
+        facts = await self._recall(request.message)
+        if facts:
+            remembered = AgentStepEvent(
+                step_id="memory",
+                agent="memory",
+                status="completed",
+                title="Remembered",
+                detail="; ".join(f.content for f in facts),
+            )
+            log.record(remembered)
+            yield remembered
+        memory = format_memory(facts, summary)
 
         route = await self._route(request.message, trace)
         if route is not None:  # an action request: the agent handles the rest of the turn
+            log.record(route)
             yield route
             run = self._agent.start(  # type: ignore[union-attr]  # _route checked it
                 conversation_id=str(request.conversation_id),
                 model_id=model_id,
                 messages=history,
+                memory=memory,
                 trace=trace,
             )
-            turn = self._agent_turn(run, request.conversation_id, model_id, trace)
+            turn = self._agent_turn(run, request.conversation_id, model_id, trace, log=log)
             async with aclosing(turn) as events:
                 async for event in events:
                     yield event
@@ -198,7 +224,7 @@ class ChatService:
                 detail=search_query,
             )
         sources = await self._retrieve(search_query, trace)
-        prompt = self._render_system_prompt(sources)
+        prompt = self._render_system_prompt(sources, memory)
         llm_messages = [ChatMessage(role="system", content=prompt.text), *history]
 
         answer_parts: list[str] = []
@@ -441,26 +467,70 @@ class ChatService:
         )
         return last_question == request.message
 
-    async def _load_history(
-        self, session: AsyncSession, conversation_id: uuid.UUID
-    ) -> list[ChatMessage]:
-        """The last N messages, oldest first: the model's short-term memory.
+    async def _history_and_summary(
+        self, conversation_id: uuid.UUID, trace: Span
+    ) -> tuple[list[ChatMessage], str | None]:
+        """Short-term memory: (recent messages word for word, summary of the older ones).
 
-        Why a limit: every message is re-sent on every turn (the model API is stateless),
-        so long chats cost more tokens and eventually overflow the context window.
-        Phase 4 replaces this simple window with summarised memory.
+        Every message is re-sent on every turn (the model API is stateless), so long chats
+        cost more tokens and eventually overflow the context window. The newest
+        `keep_last_messages` go as they are; when older ones pile up, they're folded into
+        the conversation's running summary (one cheap-model call), stored so it's done once.
+        Without a summarizer: just the last `chat_history_limit` messages (Phase 1-3).
         """
-        rows = await session.scalars(
-            select(Message)
-            .where(
-                Message.conversation_id == conversation_id,
-                Message.role.in_(("user", "assistant")),
-                Message.error_code.is_(None),  # skip answers that were cut off by an error
+        async with self._session_factory() as session:
+            rows = await session.scalars(
+                select(Message)
+                .where(
+                    Message.conversation_id == conversation_id,
+                    Message.role.in_(("user", "assistant")),
+                    Message.error_code.is_(None),  # skip answers cut off by an error, or paused
+                )
+                .order_by(Message.created_at)
             )
-            .order_by(Message.created_at.desc())
-            .limit(self._settings.chat_history_limit)
-        )
-        return [ChatMessage(role=m.role, content=m.content) for m in reversed(rows.all())]
+            messages = [ChatMessage(role=m.role, content=m.content) for m in rows.all()]
+            if self._summarizer is None:
+                return messages[-self._settings.chat_history_limit :], None
+
+            keep = self._memory_config.short_term.keep_last_messages
+            older, recent = messages[:-keep], messages[-keep:]
+            conversation = await session.get(Conversation, conversation_id)
+            assert conversation is not None
+            # Fold in a batch at a time (not every turn): one summary call per `keep` messages.
+            if len(older) - conversation.summarized_count >= keep:
+                new = older[conversation.summarized_count :]
+                folded = await self._summarizer.fold(conversation.summary, new, trace)
+                if folded:
+                    conversation.summary = folded
+                    conversation.summarized_count = len(older)
+                    await session.commit()
+            # Messages older than the window but not summarised yet still go verbatim.
+            unsummarized = older[conversation.summarized_count :]
+            return [*unsummarized, *recent], conversation.summary
+
+    async def _recall(self, question: str) -> list:
+        """Long-term memory: stored facts about the user most related to this question."""
+        if self._memory is None or not self._memory_config.long_term.enabled:
+            return []
+        try:
+            return await self._memory.recall(question)
+        except Exception:  # memory must never break a chat turn
+            logger.warning("memory recall failed", exc_info=True)
+            return []
+
+    def _remember_later(self, message: str, conversation_id: uuid.UUID) -> None:
+        """Extract facts from the user's message in the background: the answer doesn't wait."""
+        if self._memory is None or not self._memory_config.long_term.enabled:
+            return
+        task = asyncio.create_task(self._remember(message, conversation_id))
+        self._background.add(task)
+        task.add_done_callback(self._background.discard)
+
+    async def _remember(self, message: str, conversation_id: uuid.UUID) -> None:
+        try:
+            await self._memory.remember(message, conversation_id)  # type: ignore[union-attr]
+        except Exception:
+            logger.warning("remembering failed", exc_info=True)
 
     async def answer(
         self,
@@ -482,7 +552,7 @@ class ChatService:
         earlier = history or []
         search_query = await self.rewrite_query(question, earlier, trace)
         chunks = await self._retrieve(search_query, trace)
-        prompt = self._render_system_prompt(chunks)
+        prompt = self._render_system_prompt(chunks, NO_MEMORY)  # evals: no personal memory
         messages = [
             ChatMessage(role="system", content=prompt.text),
             *earlier,
@@ -563,12 +633,13 @@ class ChatService:
         )
         return chunks
 
-    def _render_system_prompt(self, chunks: list[Chunk]) -> RenderedPrompt:
+    def _render_system_prompt(self, chunks: list[Chunk], memory: str) -> RenderedPrompt:
         return self._prompts.render(
             "chat_system",
             assistant_name=self._settings.assistant_name,
             today=date.today().isoformat(),
             sources=format_sources(chunks),
+            memory=memory,
         )
 
     async def _save_assistant_message(
@@ -597,7 +668,7 @@ class ChatService:
             message.trace_id = trace_id
             # Stored so a reopened conversation shows the same chips.
             message.citations = [c.model_dump() for c in citations] or None
-            message.agent = agent.model_dump() if agent else None
+            message.agent = agent.model_dump(mode="json") if agent else None
             if completion:
                 message.input_tokens = completion.input_tokens
                 message.output_tokens = completion.output_tokens

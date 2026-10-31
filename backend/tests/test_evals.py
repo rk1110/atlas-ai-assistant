@@ -28,3 +28,15 @@ def test_filter_by_tag_and_limit():
     acme = golden.filtered(tag="acme")
     assert acme and all("acme" in q.tags for q in acme)
     assert len(golden.filtered(limit=2)) == 2
+
+
+def test_agent_tasks_load_and_matching_is_a_case_insensitive_subset():
+    from evals.agent_run import ExpectedAction, _matches, load_tasks
+
+    tasks = load_tasks()
+    assert len({t.id for t in tasks}) == len(tasks) >= 10
+    assert all(t.expect for t in tasks if t.route == "agent")
+    proposal = {"tool": "create_ticket", "args": {"project": "it", "summary": "x"}}
+    assert _matches(proposal, ExpectedAction(tool="create_ticket", args={"project": "IT"}))
+    assert not _matches(proposal, ExpectedAction(tool="create_ticket", args={"project": "HR"}))
+    assert not _matches(proposal, ExpectedAction(tool="post_slack_message"))

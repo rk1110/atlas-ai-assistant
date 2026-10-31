@@ -34,6 +34,20 @@ export interface StoredAgentLog {
   steps: AgentStepEvent[];
   tool_calls: ToolCallEvent[];
   approvals: (ApprovalRequestEvent & { state: "pending" | "approved" | "rejected" })[];
+  timeline: ActivityEntry[];
+}
+
+/** One event on the Agent Activity Panel's timeline, with when it happened. */
+export interface ActivityEntry {
+  at: string; // ISO time
+  event: AgentStepEvent | ToolCallEvent | ApprovalRequestEvent;
+}
+
+/** A fact Atlas remembers about the user (Phase 4, services/memory.py). */
+export interface Memory {
+  id: string;
+  content: string;
+  score: number | null;
 }
 
 export interface StoredMessage {
@@ -315,6 +329,8 @@ export const api = {
 
   analytics: () => request<Analytics>("/api/analytics"),
   outbox: () => request<Outbox>("/api/outbox"),
+  memories: () => request<Memory[]>("/api/memories"),
+  forgetMemory: (id: string) => request<void>(`/api/memories/${id}`, { method: "DELETE" }),
 };
 
 /** Fired after anything that changes the sidebar's conversation list. */

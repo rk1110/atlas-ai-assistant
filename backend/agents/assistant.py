@@ -41,6 +41,7 @@ class AssistantAgent(Agent):
             "agent_system",
             assistant_name=self._settings.assistant_name,
             today=date.today().isoformat(),
+            memory=state.scratch.get("memory", "(nothing yet)"),
         )
         trace: Span | None = state.scratch.get("trace")
         turn = await self._gateway.complete_with_tools(

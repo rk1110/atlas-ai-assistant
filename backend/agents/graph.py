@@ -44,6 +44,7 @@ def build_graph(
             messages=[ChatMessage(**m) for m in state["messages"]],
             scratch={
                 "model_id": state["model_id"],
+                "memory": state.get("memory", "(nothing yet)"),
                 "model_calls": state["model_calls"],
                 "trace": context.trace,
             },

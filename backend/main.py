@@ -15,7 +15,17 @@ from pydantic import BaseModel
 from sqlalchemy import text
 
 from agents.checkpoints import postgres_checkpointer
-from api import analytics, chat, classify, conversations, graph, knowledge, models, outbox
+from api import (
+    analytics,
+    chat,
+    classify,
+    conversations,
+    graph,
+    knowledge,
+    memory,
+    models,
+    outbox,
+)
 from api.deps import SessionDep, get_settings
 from core.embeddings import get_embedder
 from core.tracing import get_tracer
@@ -65,6 +75,7 @@ app.include_router(classify.router)
 app.include_router(conversations.router)
 app.include_router(graph.router)
 app.include_router(knowledge.router)
+app.include_router(memory.router)
 app.include_router(models.router)
 app.include_router(outbox.router)
 
