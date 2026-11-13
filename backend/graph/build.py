@@ -40,6 +40,10 @@ async def build(force: bool) -> int:
     print(f"Graph build · model {model_id} · sources {', '.join(s.name for s in sources)}\n")
     for source in sources:
         async for document in source.load():
+            if document.content_type in ("pdf", "image"):
+                # Scans and charts need a vision call to become text; the graph sticks to
+                # typed documents rather than pay for that OCR a second time.
+                continue
             raw = document.content
             data = raw if isinstance(raw, bytes) else raw.encode()
             content_hash = hashlib.sha256(data).hexdigest()

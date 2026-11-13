@@ -2,7 +2,7 @@
 
 import { MotionConfig } from "motion/react";
 import { useRouter } from "next/navigation";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { ActivityPanel } from "@/components/chat/activity-panel";
 import { Composer } from "@/components/chat/composer";
@@ -11,6 +11,7 @@ import { MessageList } from "@/components/chat/message-list";
 import { ModelSwitcher } from "@/components/chat/model-switcher";
 import { PageHeader } from "@/components/page-header";
 import { notifyConversationsChanged } from "@/lib/api";
+import { speak } from "@/lib/speech";
 import { type ChatMessage, useChatStream } from "@/lib/use-chat-stream";
 
 interface Props {
@@ -47,6 +48,15 @@ export function ChatView({ conversationId, title, initialMessages }: Props) {
 
   const { messages, isStreaming, send, respond, stop } = useChatStream({ getConversationId, initialMessages, onTurnEnd });
 
+  // A question asked by voice gets its answer read aloud when it finishes (Phase 6).
+  const readAloudRef = useRef(false);
+  useEffect(() => {
+    if (isStreaming || !readAloudRef.current) return;
+    readAloudRef.current = false;
+    const answer = messages.at(-1);
+    if (answer?.role === "assistant" && answer.status === "done" && answer.content) speak(answer.id, answer.content);
+  }, [isStreaming, messages]);
+
   const lastQuestion = messages.findLast((m) => m.role === "user")?.content;
   const retry = () => lastQuestion && send(lastQuestion, modelId, { retry: true });
 
@@ -65,7 +75,15 @@ export function ChatView({ conversationId, title, initialMessages }: Props) {
           )}
         </div>
         <div className="sticky bottom-0 bg-gradient-to-t from-background from-70% pt-2 pb-4">
-          <Composer isStreaming={isStreaming} disabled={modelId === null} onSend={(text) => send(text, modelId)} onStop={stop} />
+          <Composer
+            isStreaming={isStreaming}
+            disabled={modelId === null}
+            onSend={(text, images, byVoice) => {
+              readAloudRef.current = byVoice;
+              send(text, modelId, { images });
+            }}
+            onStop={stop}
+          />
           <p className="mt-2 text-center text-xs text-muted-foreground">
             Atlas can make mistakes. Check the cited sources, and review every action before you approve it.
           </p>

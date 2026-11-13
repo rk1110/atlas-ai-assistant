@@ -78,5 +78,6 @@ sources:
 
 uploads:
   max_file_mb: 10
-  # Each needs a parser (ingestion/parsers). Scanned PDFs have no text layer: OCR is Phase 6.
-  extensions: [.md, .markdown, .txt, .html, .htm, .pdf]
+  # Each needs a parser (ingestion/parsers). Scanned PDFs and images are read by the vision
+  # model (defaults.vision in models.yaml), one call per image or scanned page.
+  extensions: [.md, .markdown, .txt, .html, .htm, .pdf, .png, .jpg, .jpeg, .webp]

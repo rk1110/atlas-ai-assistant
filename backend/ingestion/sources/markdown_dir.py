@@ -7,15 +7,20 @@ chip takes you.
 
 from collections.abc import AsyncIterator
 from pathlib import Path
+from typing import ClassVar
 
 import anyio
 
-from core.interfaces.data_source import DataSource, Document
+from core.interfaces.data_source import ContentType, DataSource, Document
 from ingestion.parsers.markdown import split_front_matter
 
 
 class MarkdownDirectorySource(DataSource):
-    """Every `*.md` file under `root`, in a stable (sorted) order."""
+    """Every `*.md` file under `root`, in a stable (sorted) order, plus any `binary_types`."""
+
+    # Non-Markdown files to load too, by suffix (Phase 6: scans and charts, read by a vision
+    # model during parsing). Empty here: the GitLab handbook is Markdown only.
+    binary_types: ClassVar[dict[str, ContentType]] = {}
 
     def __init__(self, root: Path, name: str | None = None):
         if name:
@@ -39,6 +44,17 @@ class MarkdownDirectorySource(DataSource):
                 content_type="markdown",
                 url=self.url_for(relative),
                 metadata={k: v for k, v in meta.items() if isinstance(v, str | int | float)},
+            )
+        binaries = (p for p in self.root.rglob("*") if p.suffix.lower() in self.binary_types)
+        for path in sorted(binaries):
+            relative = path.relative_to(self.root)
+            yield Document(
+                id=f"{self.name}:{self.document_path(relative)}",
+                source=self.name,
+                title=_title_from_path(relative),
+                content=await anyio.Path(path).read_bytes(),
+                content_type=self.binary_types[path.suffix.lower()],
+                url=self.url_for(relative),
             )
 
     def document_path(self, relative: Path) -> str:
@@ -70,6 +86,12 @@ class AcmeDocsSource(MarkdownDirectorySource):
     so there's no website: citation chips open the passage inside Atlas instead."""
 
     name = "acme-docs"
+    binary_types: ClassVar[dict[str, ContentType]] = {
+        ".pdf": "pdf",
+        ".png": "image",
+        ".jpg": "image",
+        ".jpeg": "image",
+    }
 
 
 def _title_from_path(relative: Path) -> str:

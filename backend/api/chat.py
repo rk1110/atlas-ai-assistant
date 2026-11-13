@@ -30,9 +30,13 @@ async def chat(request: ChatRequest, chat_service: ChatServiceDep, catalog: Cata
     model_id = request.model_id or catalog.defaults.chat
     if catalog.get(model_id) is None:
         raise HTTPException(status_code=400, detail=f"Unknown model '{model_id}'")
+    try:  # Phase 6: a bad image is a clean 400 now, not an error mid-stream
+        images = chat_service.decode_images(request)
+    except ValueError as exc:  # ImageError is a ValueError
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     async def sse() -> AsyncIterator[str]:
-        async for event in chat_service.stream_reply(request, model_id):
+        async for event in chat_service.stream_reply(request, model_id, images):
             yield to_sse(event)
 
     return StreamingResponse(sse(), media_type="text/event-stream", headers=SSE_HEADERS)

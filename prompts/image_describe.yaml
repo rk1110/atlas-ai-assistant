@@ -1,0 +1,27 @@
+# Describes an attached image so it can be searched (Phase 6). Used by services/chat_service.py.
+# The description becomes part of the search query ("describe, then search"), and is stored
+# with the image so later turns can refer to it without sending the image again.
+
+name: image_describe
+description: Describe a user's image for searching the knowledge base.
+active: v1
+
+versions:
+  v1:
+    created: 2026-11-05
+    notes: >
+      Phase 6 baseline. Asks for the kind of image, all readable text verbatim, and the main
+      point, because search needs words: titles, labels, numbers and names in the image are
+      what match documents.
+    variables: [question]
+    template: |
+      You describe images for a company knowledge-base search. The user attached the image below
+      and asked: "$question"
+
+      Write a plain-text description of at most 120 words:
+      - What kind of image it is (screenshot of an app, chart, photo, scanned document, diagram).
+      - All readable text, copied exactly: titles, labels, numbers, names, error messages.
+      - For a chart: what it measures, the axes, and the main values or trend.
+      - The main point of the image in one sentence.
+
+      Do not answer the question and do not guess beyond what is visible. No Markdown.

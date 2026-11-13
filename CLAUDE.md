@@ -79,6 +79,9 @@ docker compose exec backend python -m evals.run --retrieval-only   # hit rate + 
 docker compose exec backend python -m evals.run --retrieval-only --retriever all   # compare retrieval strategies
 docker compose exec backend python -m evals.run --retriever vector --no-rewrite    # full run with Phase 2 settings
 docker compose exec backend python -m evals.run --no-judge  # skip the LLM-as-judge scores
+docker compose exec backend python -m evals.run --tag multimodal   # scanned PDF + chart questions (Phase 6)
+docker compose exec backend python -m evals.voice_run   # speech-to-text word error rate (--model small, --no-prompt)
+docker compose exec -e HF_HUB_OFFLINE=0 backend python -m evals.voice_run   # first time: also downloads Whisper
 docker compose exec backend python -m evals.agent_run       # agent evals: routing, actions, approval gate
 docker compose exec backend python -m evals.agent_run --mode single   # compare with the Phase 4 single agent
 docker compose exec backend python -m scripts.smoke_llm     # one streamed reply per model
@@ -112,7 +115,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | 3 | Advanced RAG + evals (hybrid, reranker, query rewriting, GraphRAG, CI evals) | Built in one shot at my request (2026-10-30); walkthrough written; quiz + exercises pending (Phase 2's too) |
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Built (2026-10-31; agent evals: routing 100%, actions 88%, unapproved writes 0); walkthrough + demo script written; quiz + exercises pending |
 | 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Built (2026-10-31; team 88% = single 88% at 2.5x calls; Jira/Slack via MCP; Atlas MCP server over stdio); Claude Desktop check, quiz + exercises pending |
-| 6 | Multimodal + voice | Not started |
+| 6 | Multimodal + voice | Built (2026-11-08; image questions via Gemma 4, scanned PDFs + charts in the KB: multimodal evals hit 100% / correct 90%; voice: local Whisper base, WER 3.8%, browser read-aloud); walkthrough written; quiz + exercises pending |
 | 7 | Production-ready (guardrails, caching, routing, auth, cost dashboard, deploy) | Not started |
 | 8 | Fine-tune + launch (Ollama, LoRA, demo video, README) | Not started |
 

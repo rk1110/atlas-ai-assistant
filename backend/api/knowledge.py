@@ -36,6 +36,7 @@ from api.deps import (
     SessionDep,
     UploadSourceDep,
 )
+from core.images import sniff
 from core.interfaces.retriever import Chunk
 from core.rag_config import RetrievalStrategy
 from ingestion.pipeline import IngestionPipeline
@@ -151,6 +152,11 @@ async def upload(
         )
     if not content:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The file is empty")
+    if source.is_image(filename) and sniff(content) is None:
+        # The extension is only a claim; the bytes must really be an image (Phase 6).
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE, f"'{filename}' is not a valid image"
+        )
 
     path = source.root / filename
     await anyio.Path(source.root).mkdir(parents=True, exist_ok=True)

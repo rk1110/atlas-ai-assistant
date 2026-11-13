@@ -1,0 +1,29 @@
+# Reads one scanned PDF page (Phase 6). Used by ingestion/vision.py.
+# The output is chunked and embedded like any other text, so it must be faithful: OCR that
+# "improves" or summarises the page would put words in the policy that it never said.
+
+name: ocr_page
+description: Transcribe a scanned document page to Markdown for the knowledge base.
+active: v1
+
+versions:
+  v1:
+    created: 2026-11-08
+    notes: >
+      Phase 6 baseline. Verbatim transcription with Markdown headings, because the chunker
+      splits on headings and stores the heading path with each chunk. Unreadable words are
+      marked instead of guessed.
+    variables: [title, page, pages]
+    template: |
+      This image is page $page of $pages of a scanned document called "$title".
+      Transcribe it for a company knowledge base.
+
+      - Copy all text exactly as written, in reading order. Do not summarise, translate,
+        correct or add anything.
+      - Use Markdown: "#" or "##" for titles and section headings, "-" for bullet lists,
+        Markdown tables for tables.
+      - Skip page furniture that repeats on every page (page numbers, running headers).
+      - Write [unreadable] for any word you cannot read. Never guess.
+      - If the page has no text, reply with exactly: [no text]
+
+      Reply with the transcription only.

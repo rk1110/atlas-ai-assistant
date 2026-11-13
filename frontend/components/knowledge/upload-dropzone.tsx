@@ -12,8 +12,11 @@ interface Props {
   onFiles: (files: File[]) => void;
 }
 
+const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".webp"]);
+
 /** Drop files here or click to pick them. The backend re-checks type and size. */
 export function UploadDropzone({ extensions, maxFileMb, uploading, onFiles }: Props) {
+  const readsImages = extensions.some((e) => IMAGE_EXTENSIONS.has(e));
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
 
@@ -44,6 +47,11 @@ export function UploadDropzone({ extensions, maxFileMb, uploading, onFiles }: Pr
       <span className="text-xs text-muted-foreground">
         {extensions.join(", ")} · up to {maxFileMb} MB each
       </span>
+      {readsImages && (
+        <span className="text-xs text-muted-foreground">
+          Images and scanned PDFs are read by the vision model, so charts and scans become searchable.
+        </span>
+      )}
       <input
         ref={inputRef}
         type="file"

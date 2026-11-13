@@ -44,17 +44,33 @@ class ToolCall(BaseModel):
     arguments: dict[str, Any]  # parsed from the JSON string the model wrote
 
 
+class ImagePart(BaseModel):
+    """An image sent with a message (Phase 6): the raw bytes, base64-encoded, and their type.
+
+    Vision models read images as tokens too: an image is cut into patches, and each patch
+    costs roughly as much as a word or two, so a screenshot adds a few hundred input tokens.
+    """
+
+    media_type: Literal["image/png", "image/jpeg", "image/webp", "image/gif"]
+    data: str  # base64, without the "data:...;base64," prefix
+
+    def data_url(self) -> str:
+        return f"data:{self.media_type};base64,{self.data}"
+
+
 class ChatMessage(BaseModel):
     """One message in a conversation, in the role/content shape every chat model accepts.
 
     Agents (Phase 4) add two shapes: an assistant message that carries `tool_calls`, and a
     `tool` message carrying one tool's result, linked to its call by `tool_call_id`.
+    Phase 6 adds `images` on user messages, for vision models.
     """
 
     role: Literal["system", "user", "assistant", "tool"]
     content: str
     tool_calls: list[ToolCall] | None = None
     tool_call_id: str | None = None
+    images: list[ImagePart] | None = None
 
 
 class ToolTurn(BaseModel):
@@ -146,8 +162,9 @@ class LLMGateway:
         its own trace, so even one-off scripts are traced.
         """
         entry = await self._usable_entry(model_id)
+        self._check_images(entry, messages)
         own_trace = trace is None
-        span = trace or self._tracer.start_trace(name, input=_dump(messages))
+        span = trace or self._tracer.start_trace(name, input=_dump_for_trace(messages))
         generation = self._start_generation(span, name, entry, messages, prompt_ref)
 
         started = time.perf_counter()
@@ -226,8 +243,9 @@ class LLMGateway:
         its own reply and the exact validation error: models are good at fixing a named mistake.
         """
         entry = await self._usable_entry(model_id)
+        self._check_images(entry, messages)
         own_trace = trace is None
-        span = trace or self._tracer.start_trace(name, input=_dump(messages))
+        span = trace or self._tracer.start_trace(name, input=_dump_for_trace(messages))
         native = entry.structured_output == "native"
         conversation = list(messages) if native else _with_schema_instructions(messages, schema)
         extra = {"response_format": schema} if native else {}
@@ -327,8 +345,9 @@ class LLMGateway:
         the model as an error it can fix.
         """
         entry = await self._usable_entry(model_id)
+        self._check_images(entry, messages)
         own_trace = trace is None
-        span = trace or self._tracer.start_trace(name, input=_dump(messages))
+        span = trace or self._tracer.start_trace(name, input=_dump_for_trace(messages))
         generation = self._start_generation(span, name, entry, messages, prompt_ref)
         started = time.perf_counter()
         try:
@@ -353,6 +372,16 @@ class LLMGateway:
         return ToolTurn(text=text, tool_calls=calls, completion=completion)
 
     # ------------------------------------------------------------------ helpers
+
+    @staticmethod
+    def _check_images(entry: ModelEntry, messages: list[ChatMessage]) -> None:
+        """A text-only model sent an image either errors or silently ignores it (and answers
+        as if there were no image). Fail clearly instead; callers route images to a vision
+        model (`defaults.vision`) before getting here."""
+        if not entry.vision and any(m.images for m in messages):
+            raise LLMError(
+                "bad_request", f"{entry.label} can't read images. Pick a vision model.", entry.id
+            )
 
     async def _usable_entry(self, model_id: str) -> ModelEntry:
         entry = self._catalog.get(model_id)
@@ -388,7 +417,7 @@ class LLMGateway:
         return span.generation(
             name,
             model=entry.litellm_model,
-            input=_dump(messages),
+            input=_dump_for_trace(messages),
             model_parameters=entry.params,
             version=prompt_ref,
             metadata={
@@ -561,7 +590,30 @@ def _wire(m: ChatMessage) -> dict[str, Any]:
                 for c in m.tool_calls
             ],
         }
+    if m.images:
+        # OpenAI-style content parts: the text, then each image as a data URL. LiteLLM turns
+        # this into each provider's own format (Anthropic image blocks, Ollama's `images`).
+        return {
+            "role": m.role,
+            "content": [
+                {"type": "text", "text": m.content},
+                *({"type": "image_url", "image_url": {"url": i.data_url()}} for i in m.images),
+            ],
+        }
     return {"role": m.role, "content": m.content}
+
+
+def _dump_for_trace(messages: list[ChatMessage]) -> list[dict[str, Any]]:
+    """What Langfuse records: the same messages, with each image replaced by a short note.
+    A screenshot is hundreds of kilobytes of base64; traces stay readable and small."""
+    dumped = []
+    for m in messages:
+        wire = _wire(m)
+        if m.images:
+            notes = [f"[image: {i.media_type}, {len(i.data) * 3 // 4096} KB]" for i in m.images]
+            wire = {"role": m.role, "content": "\n".join([m.content, *notes])}
+        dumped.append(wire)
+    return dumped
 
 
 def _tool_call(raw: Any) -> ToolCall:

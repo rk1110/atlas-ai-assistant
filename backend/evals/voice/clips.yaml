@@ -1,0 +1,26 @@
+# Spoken questions for the voice eval (Phase 6): `python -m evals.voice_run`.
+# Each clip was made with macOS text-to-speech, e.g.:
+#   say -o parental-leave.wav --data-format=LEI16@16000 "How many weeks of parental leave do I get at Acme?"
+# Synthetic speech is clean and evenly paced, so this measures the floor, not real-world
+# accuracy: record yourself (accents, a noisy room) to see how much worse it gets.
+# `text` is what was said; the eval reports word error rate (WER) against it.
+
+clips:
+  - id: parental-leave
+    file: parental-leave.wav
+    text: How many weeks of parental leave do I get at Acme?
+  - id: expense-owner
+    file: expense-owner.wav
+    text: Who owns the expense policy?
+  - id: badge-lost
+    file: badge-lost.wav
+    text: I lost my office badge. What should I do?
+  - id: hardware-tickets
+    file: hardware-tickets.wav
+    text: How many hardware tickets did IT handle in Q3 2026?
+  - id: laptop-ticket
+    file: laptop-ticket.wav
+    text: Open a Jira ticket for a new laptop for Priya, high priority.
+  - id: gitlab-values
+    file: gitlab-values.wav
+    text: What are GitLab's core values?

@@ -15,10 +15,10 @@ import asyncio
 import logging
 import time
 
-from core.db import get_session_factory
-from core.embeddings import get_embedder
+from api.deps import get_ingestion_pipeline
 from core.rag_config import get_rag_config
-from ingestion.pipeline import DocumentResult, IngestionPipeline
+from core.tracing import get_tracer
+from ingestion.pipeline import DocumentResult
 from ingestion.sources import build_sources
 
 
@@ -38,7 +38,7 @@ async def run(source_name: str | None, force: bool) -> int:
         print(f"No source named '{source_name}'. Options: {[s.name for s in config.sources]}")
         return 2
 
-    pipeline = IngestionPipeline(get_embedder(), config.chunking, get_session_factory())
+    pipeline = get_ingestion_pipeline()  # with the vision reader, for scans and images
     started = time.perf_counter()
     failed = 0
     for source in sources:
@@ -52,6 +52,7 @@ async def run(source_name: str | None, force: bool) -> int:
             f"{report.removed} removed"
         )
     print(f"\nDone in {time.perf_counter() - started:.1f} s")
+    get_tracer().flush()  # send vision-model traces before the process exits
     return 1 if failed else 0
 
 

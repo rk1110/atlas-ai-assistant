@@ -36,6 +36,9 @@ class ModelEntry(BaseModel):
     structured_output: Literal["native", "prompt"] = "native"
     extra_headers: dict[str, str] = Field(default_factory=dict)
     extra_body: dict[str, Any] = Field(default_factory=dict)
+    # Can it read images (Phase 6)? A text-only model sent an image errors or ignores it, so
+    # the chat routes image questions to `defaults.vision` instead.
+    vision: bool = False
 
     @model_validator(mode="after")
     def one_api_base_source(self) -> "ModelEntry":
@@ -47,6 +50,7 @@ class ModelEntry(BaseModel):
 class CatalogDefaults(BaseModel):
     chat: str
     cheap: str
+    vision: str | None = None  # answers (and describes) messages with images; None = no vision
 
 
 class ModelAvailability(BaseModel):
@@ -72,6 +76,9 @@ class ModelCatalog:
         for default in (self.defaults.chat, self.defaults.cheap):
             if default not in self._entries:
                 raise ValueError(f"models.yaml default '{default}' is not a model id")
+        vision = self.defaults.vision
+        if vision is not None and not getattr(self._entries.get(vision), "vision", False):
+            raise ValueError(f"models.yaml vision default '{vision}' is not a vision model")
         for entry in self._entries.values():
             for setting in (entry.api_key_setting, entry.api_base_setting):
                 if setting and setting not in Settings.model_fields:

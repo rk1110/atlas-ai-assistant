@@ -21,10 +21,14 @@
 #   keyword (exact terms), follow-up (need `history`), relational (multi-hop, GraphRAG),
 #   paraphrase (different wording), unanswerable (expected_sources: [], must not guess).
 #
+# Phase 6 (version 3) added 5 "multimodal" questions whose answers exist ONLY in pixels: a
+# scanned PDF with no text layer (facilities/office-access-policy-scan.pdf) and a bar chart
+# (it/support-tickets-q3-2026.png). They pass only if the vision model read them at import.
+#
 # Acme Corp is fictional. Its expected answers DEFINE facts that the Acme corpus generated in
 # Phase 2 must contain, so keep them specific and consistent.
 
-version: 2
+version: 3
 
 questions:
   - id: gitlab-values
@@ -482,3 +486,42 @@ questions:
     expected_answer: "Says it couldn't find this in the knowledge base (does not guess)."
     expected_sources: []
     tags: [acme, unanswerable]
+
+  # ---------------------------------------------------------------- Phase 6: multimodal
+
+  - id: acme-badge-replacement-fee
+    question: How much does it cost to replace a lost office badge at Acme?
+    expected_answer: >
+      The first replacement is free; each further replacement costs €25, deducted from
+      payroll.
+    expected_sources: ["acme-docs:facilities/office-access-policy-scan.pdf"]
+    tags: [acme, multimodal]
+
+  - id: acme-visitor-rules
+    question: I'm bringing a visitor to the Austin office. What do I need to do?
+    expected_answer: >
+      Register the visitor with reception the day before. The visitor signs the NDA at
+      reception, wears a red visitor badge, and must be escorted by their host at all times;
+      the badge is returned at reception before leaving.
+    expected_sources: ["acme-docs:facilities/office-access-policy-scan.pdf"]
+    tags: [acme, multimodal]
+
+  - id: acme-weekend-office-access
+    question: Can I get into the office on a Saturday?
+    expected_answer: >
+      Badges only open the doors 7:00-20:00 Monday to Friday. Weekend access needs your
+      manager's approval and an IT ticket at least one working day in advance.
+    expected_sources: ["acme-docs:facilities/office-access-policy-scan.pdf"]
+    tags: [acme, multimodal, paraphrase]
+
+  - id: acme-top-ticket-category
+    question: What was the most common type of IT support ticket in Q3 2026?
+    expected_answer: Password resets, with 412 of the 1,010 tickets.
+    expected_sources: ["acme-docs:it/support-tickets-q3-2026.png"]
+    tags: [acme, multimodal]
+
+  - id: acme-hardware-tickets
+    question: How many hardware tickets did IT handle last quarter (Q3 2026)?
+    expected_answer: 268 hardware tickets in Q3 2026.
+    expected_sources: ["acme-docs:it/support-tickets-q3-2026.png"]
+    tags: [acme, multimodal]

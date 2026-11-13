@@ -182,9 +182,9 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 <div class="wrap">
   <header class="head">
     <div class="fix">
-      <span>Position: <b>Phase 5 built: agent team + MCP (ready for Demo 2)</b></span>
-      <span>Next: <b>Learning sessions for Phases 2–5</b></span>
-      <span>Updated <b>2026-10-31</b></span>
+      <span>Position: <b>Phase 6 built: images, scans, charts and voice; quiz + exercises pending</b></span>
+      <span>Next: <b>Phase 7 plan (production-ready), waiting for your OK</b></span>
+      <span>Updated <b>2026-11-08</b></span>
     </div>
     <h1>Atlas Map</h1>
     <p class="lede">Press play to follow one chat message through the code, from the Enter key to the last token. Click any box to see what it does and which file it lives in.</p>
@@ -310,8 +310,11 @@ const NODES = {
   ollamac:  { layer: "Providers", name: "Ollama Cloud", file: "gpt-oss:120b / gpt-oss:20b", status: "built",
               what: "The default models right now. Hosted open-weight models reached with your OLLAMA_API_KEY.",
               concept: "<strong>Tokens.</strong> Models read and write small text pieces; you pay and hit limits by token count." },
+  gemma:    { layer: "Providers", name: "Gemma 4 (vision)", file: "gemma4:31b on Ollama Cloud", status: "built",
+              what: "Reads images. A message with a screenshot is routed here, described for search, then answered with the image and the sources.",
+              concept: "<strong>Routing by capability.</strong> GPT-OSS is text-only, so image questions go to the model that can see. Free tier, about 2 seconds." },
   claude:   { layer: "Providers", name: "Claude", file: "claude-sonnet-5-5 / claude-haiku-5-5", status: "built",
-              what: "Wired up, but the account has no API credit yet, so calls return a clean 'billing' error.",
+              what: "Wired up and marked vision-capable, but the account has no API credit yet, so calls return a clean 'billing' error.",
               concept: "<strong>Graceful failure.</strong> A provider error becomes an error event, never a crash." },
   bge:      { layer: "Providers", name: "BGE-small (local)", file: "BAAI/bge-small-en-v1.5 on CPU", status: "built",
               what: "A 33M-parameter embedding model running inside the backend container. No API key, no cost.",
@@ -397,6 +400,9 @@ const CHECKPOINTS = [
   { name: "Phase 4 · part B", status: "built", items: ["Short- and long-term memory, Settings list", "Activity panel; agent evals: routing 100%, actions 88%, 0 unapproved writes"] },
   { name: "Phase 5 · part A", status: "built", items: ["Planner, Researcher, Action, Verifier", "Animated agent graph; team 88% at 2.5x calls"] },
   { name: "Phase 5 · part B", status: "built", items: ["Jira + Slack as MCP servers, default-deny approvals", "Atlas as a read-only MCP server (stdio)"] },
+  { name: "Phase 6 · A", status: "built", items: ["Ask about a screenshot: attach, paste or drop", "Gemma 4 vision, describe-then-search, images saved"] },
+  { name: "Phase 6 · B", status: "built", items: ["Scanned PDFs read by the vision model (OCR)", "Image and chart uploads to the knowledge base", "5 multimodal evals: hit rate 100%, correct 90%"] },
+  { name: "Phase 6 · C", status: "built", items: ["Voice in: local Whisper speech-to-text (WER 3.8%)", "Voice out: answers read aloud"] },
 ];
 
 const PHASES = [
@@ -404,8 +410,8 @@ const PHASES = [
   { no: 2, name: "Core RAG", what: "Load the handbook and Acme docs, embeddings, pgvector, citation chips.", demo: "Demo 1" },
   { no: 3, name: "Advanced RAG + evals", what: "Hybrid search, reranker, query rewriting, GraphRAG, evals in CI." },
   { no: 4, name: "Agents + tools", what: "LangGraph agent, tools, approval cards, memory." },
-  { no: 5, name: "Multi-agent + MCP", what: "Planner, Researcher, Action and Verifier; Jira and Slack via MCP.", demo: "Demo 2", now: true },
-  { no: 6, name: "Multimodal + voice", what: "Questions about images and scanned PDFs; speak and listen." },
+  { no: 5, name: "Multi-agent + MCP", what: "Planner, Researcher, Action and Verifier; Jira and Slack via MCP.", demo: "Demo 2" },
+  { no: 6, name: "Multimodal + voice", what: "Questions about images and scanned PDFs; speak and listen.", now: true },
   { no: 7, name: "Production-ready", what: "Guardrails, caching, model routing, login, cost dashboard, deploy." },
   { no: 8, name: "Fine-tune + launch", what: "Local Ollama, a small LoRA fine-tune, demo video, README.", demo: "Final demo" },
 ];

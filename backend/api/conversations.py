@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from api.deps import SessionDep, TracerDep
 from core.events import AgentLog, CitationEvent
-from models import Conversation, Message
+from models import Conversation, Message, MessageImage
 
 router = APIRouter(prefix="/api/conversations", tags=["conversations"])
 
@@ -33,6 +33,15 @@ class MessageOut(BaseModel):
     trace_url: str | None
     citations: list[CitationEvent]  # the chips under an answer, same shape as the live event
     agent: AgentLog | None  # agent answers: steps, tool calls, approval cards (Phase 4)
+    images: list["ImageRef"] = []  # user messages with attached images (Phase 6)
+
+
+class ImageRef(BaseModel):
+    """An attached image, fetched separately from GET /api/images/{id} (bytes stay out of JSON)."""
+
+    id: uuid.UUID
+    media_type: str
+    description: str | None
 
 
 @router.get("")
@@ -52,11 +61,24 @@ async def list_messages(
 ) -> list[MessageOut]:
     if await session.get(Conversation, conversation_id) is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
-    rows = await session.scalars(
-        select(Message)
-        .where(Message.conversation_id == conversation_id, Message.role != "system")
-        .order_by(Message.created_at)
+    rows = list(
+        await session.scalars(
+            select(Message)
+            .where(Message.conversation_id == conversation_id, Message.role != "system")
+            .order_by(Message.created_at)
+        )
     )
+    images: dict[uuid.UUID, list[ImageRef]] = {}
+    image_rows = await session.execute(
+        select(MessageImage.id, MessageImage.message_id, MessageImage.media_type,
+               MessageImage.description)
+        .where(MessageImage.message_id.in_([m.id for m in rows]))
+        .order_by(MessageImage.ordinal)
+    )  # fmt: skip
+    for image_id, message_id, media_type, description in image_rows.all():
+        images.setdefault(message_id, []).append(
+            ImageRef(id=image_id, media_type=media_type, description=description)
+        )
     return [
         MessageOut(
             id=m.id,
@@ -71,8 +93,9 @@ async def list_messages(
             trace_url=tracer.trace_url(m.trace_id),
             citations=[CitationEvent.model_validate(c) for c in m.citations or []],
             agent=AgentLog.model_validate(m.agent) if m.agent else None,
+            images=images.get(m.id, []),
         )
-        for m in rows.all()
+        for m in rows
     ]
 
 

@@ -13,6 +13,8 @@ Flow of `stream_reply` (RAG = steps 2-3: Retrieval-Augmented Generation):
     5. turn the answer's [n] markers into CitationEvents (only sources it actually cited)
     (Phase 4: if the intent classifier says the message asks for an ACTION, steps 2-5 are
     handed to the tool-using agent instead: agents/, with human approval for writes.)
+    (Phase 6: a message with images goes to a vision model, which first describes the image;
+    the description joins the search query, and the answer model reads the image itself.)
     6. save the assistant message with provenance (model, prompt, tokens, cost, citations)
     7. finish with DoneEvent, which is ALWAYS the last event, even after an error
 
@@ -21,6 +23,7 @@ with error_code="cancelled" before the cancellation is allowed to continue.
 """
 
 import asyncio
+import base64
 import logging
 import uuid
 from collections.abc import AsyncIterator
@@ -48,12 +51,15 @@ from core.events import (
     TokenEvent,
     Usage,
 )
+from core.images import decode_image
 from core.interfaces.retriever import Chunk, Retriever
-from core.llm import ChatMessage, Completion, LLMError, LLMGateway, TextDelta
+from core.llm import ChatMessage, Completion, ImagePart, LLMError, LLMGateway, TextDelta
 from core.memory_config import MemoryConfig
+from core.model_catalog import ModelCatalog
+from core.multimodal_config import MultimodalConfig
 from core.prompts import PromptRegistry, RenderedPrompt
 from core.tracing import Span, Tracer
-from models import Conversation, Message
+from models import Conversation, Message, MessageImage
 from services.grounding import citations_for, format_sources
 from services.intent import IntentClassifier
 from services.memory import NO_MEMORY, ConversationSummarizer, LongTermMemory, format_memory
@@ -62,6 +68,14 @@ from services.query_rewriter import QueryRewriter
 logger = logging.getLogger(__name__)
 
 TITLE_MAX_CHARS = 80
+
+
+class ImageInput(BaseModel):
+    """An image attached in the browser (Phase 6). The declared type is only a hint: the real
+    type is read from the bytes (core/images.py)."""
+
+    media_type: str = Field(max_length=64)
+    data: str = Field(max_length=30_000_000)  # base64; the MB limit is checked after decoding
 
 
 class ChatRequest(BaseModel):
@@ -73,6 +87,11 @@ class ChatRequest(BaseModel):
     # "Try again" after a failed answer: the question is already saved (it's saved before the
     # model is called), so answer it again instead of storing a second copy.
     retry: bool = False
+    images: list[ImageInput] = Field(default_factory=list, max_length=10)  # Phase 6
+
+
+# A checked image: its raw bytes (for the database) and the part sent to the model.
+DecodedImage = tuple[bytes, ImagePart]
 
 
 class ApprovalDecision(BaseModel):
@@ -116,6 +135,9 @@ class ChatService:
         memory: LongTermMemory | None = None,
         summarizer: ConversationSummarizer | None = None,
         memory_config: MemoryConfig | None = None,
+        *,
+        catalog: ModelCatalog | None = None,
+        multimodal: MultimodalConfig | None = None,
     ):
         self._gateway = gateway
         self._retriever = retriever
@@ -129,13 +151,28 @@ class ChatService:
         self._memory = memory
         self._summarizer = summarizer
         self._memory_config = memory_config or MemoryConfig()
+        # Phase 6: the catalog says which models can read images; None = no image support.
+        self._catalog = catalog
+        self._multimodal = multimodal or MultimodalConfig()
         self._background: set[asyncio.Task[object]] = set()  # keeps memory tasks alive
         self._prompts = prompts
         self._settings = settings
         self._session_factory = session_factory
         self._tracer = tracer
 
-    async def stream_reply(self, request: ChatRequest, model_id: str) -> AsyncIterator[StreamEvent]:
+    def decode_images(self, request: ChatRequest) -> list[DecodedImage]:
+        """Check the attached images BEFORE streaming starts, so problems are a clean 400.
+        Raises core.images.ImageError (or ValueError) with a message safe to show."""
+        limits = self._multimodal.images
+        if len(request.images) > limits.max_per_message:
+            raise ValueError(f"At most {limits.max_per_message} images per message.")
+        if request.images and (self._catalog is None or self._catalog.defaults.vision is None):
+            raise ValueError("No vision model is configured, so images can't be read.")
+        return [decode_image(i.data, max_mb=limits.max_mb) for i in request.images]
+
+    async def stream_reply(
+        self, request: ChatRequest, model_id: str, images: list[DecodedImage] | None = None
+    ) -> AsyncIterator[StreamEvent]:
         """Public entry point. Guarantees the stream ends with `done`, whatever happens inside.
 
         Each turn is one Langfuse trace; its session id is the conversation id, so Langfuse's
@@ -150,7 +187,8 @@ class ChatService:
         try:
             # aclosing: if this stream is closed early, close the inner one too, right away
             # (otherwise it would only be cleaned up whenever the garbage collector gets to it).
-            async with aclosing(self._stream_reply(request, model_id, trace)) as events:
+            turn = self._stream_reply(request, model_id, trace, images or [])
+            async with aclosing(turn) as events:
                 async for event in events:
                     yield event
         except Exception:
@@ -166,17 +204,37 @@ class ChatService:
             )
 
     async def _stream_reply(
-        self, request: ChatRequest, model_id: str, trace: Span
+        self, request: ChatRequest, model_id: str, trace: Span, images: list[DecodedImage]
     ) -> AsyncIterator[StreamEvent]:
         # A session opened HERE, inside the stream, not taken from the request: the response
         # keeps streaming after the route function returns, when request-scoped resources
         # may already be closed.
         async with self._session_factory() as session:
             conversation = await self._get_or_create_conversation(session, request)
-            if not await self._is_retry_of_last_question(session, request):
-                session.add(
-                    Message(conversation_id=conversation.id, role="user", content=request.message)
+            if await self._is_retry_of_last_question(session, request):
+                saved = await self._last_question_images(session, request.conversation_id)
+                image_ids = [i for i, _ in saved]
+                parts = [part for _, part in saved]
+            else:
+                question = Message(
+                    id=uuid.uuid4(),
+                    conversation_id=conversation.id,
+                    role="user",
+                    content=request.message,
                 )
+                session.add(question)
+                # Insert the message first: the image rows point at it (foreign key), and
+                # without an ORM relationship SQLAlchemy doesn't know to order the inserts.
+                await session.flush()
+                image_ids = [uuid.uuid4() for _ in images]
+                session.add_all(
+                    MessageImage(
+                        id=image_id, message_id=question.id, ordinal=n, media_type=part.media_type,
+                        data=raw, size_bytes=len(raw),
+                    )
+                    for n, (image_id, (raw, part)) in enumerate(zip(image_ids, images, strict=True))
+                )  # fmt: skip
+                parts = [part for _, part in images]
             conversation.updated_at = func.now()
             await session.commit()
         history, summary = await self._history_and_summary(request.conversation_id, trace)
@@ -195,7 +253,34 @@ class ChatService:
             yield remembered
         memory = format_memory(facts, summary)
 
-        route = await self._route(request.message, trace)
+        description = ""
+        if parts:  # Phase 6: an image question. Vision model, describe, then the RAG path.
+            vision_id = self._vision_model(model_id)
+            if vision_id != model_id:
+                yield AgentStepEvent(
+                    step_id="vision_route",
+                    agent="router",
+                    status="completed",
+                    title="Switched to a vision model",
+                    detail=f"{self._label(model_id)} can't read images, so "
+                    f"{self._label(vision_id)} answers this one.",
+                )
+                model_id = vision_id
+            description = await self._describe(parts, request.message, image_ids, trace)
+            if description:
+                yield AgentStepEvent(
+                    step_id="describe_image",
+                    agent="retriever",
+                    status="completed",
+                    title="Looked at your image",
+                    detail=description,
+                )
+            # The model reads the question's images; earlier turns' images travel as text.
+            if history and history[-1].role == "user":
+                history[-1] = history[-1].model_copy(update={"images": parts})
+
+        # Images skip the agent: its tools work on text, and an image question is a question.
+        route = None if parts else await self._route(request.message, trace)
         if route is not None:  # an action request: the agent handles the rest of the turn
             log.record(route)
             yield route
@@ -215,7 +300,9 @@ class ChatService:
         # A follow-up like "and for fathers?" searches poorly on its own: rewrite it first,
         # and tell the UI what was actually searched for.
         search_query = await self.rewrite_query(request.message, _earlier(history), trace)
-        if search_query != request.message:
+        if description:  # "describe, then search": the image's words help find documents
+            search_query = f"{search_query}\n{description}"
+        elif search_query != request.message:
             yield AgentStepEvent(
                 step_id="rewrite_query",
                 agent="retriever",
@@ -467,6 +554,90 @@ class ChatService:
         )
         return last_question == request.message
 
+    async def _image_notes(
+        self, session: AsyncSession, message_ids: list[uuid.UUID]
+    ) -> dict[uuid.UUID, str]:
+        """Earlier images go back to the model as their descriptions, not as images: much
+        cheaper, and enough for follow-ups like "and what about the second row?"."""
+        if not message_ids:
+            return {}
+        rows = await session.execute(
+            select(MessageImage.message_id, MessageImage.description)
+            .where(MessageImage.message_id.in_(message_ids), MessageImage.description.is_not(None))
+            .order_by(MessageImage.ordinal)
+        )
+        notes: dict[uuid.UUID, str] = {}
+        for message_id, description in rows.all():
+            notes[message_id] = notes.get(message_id, "") + f"\n\n[Attached image: {description}]"
+        return notes
+
+    async def _last_question_images(
+        self, session: AsyncSession, conversation_id: uuid.UUID
+    ) -> list[tuple[uuid.UUID, ImagePart]]:
+        """A retry re-asks the saved question, with the images saved alongside it."""
+        last_id = await session.scalar(
+            select(Message.id)
+            .where(Message.conversation_id == conversation_id, Message.role == "user")
+            .order_by(Message.created_at.desc())
+            .limit(1)
+        )
+        rows = await session.scalars(
+            select(MessageImage)
+            .where(MessageImage.message_id == last_id)
+            .order_by(MessageImage.ordinal)
+        )
+        return [
+            (
+                r.id,
+                ImagePart(media_type=r.media_type, data=base64.b64encode(r.data).decode()),  # type: ignore[arg-type]
+            )
+            for r in rows.all()
+        ]
+
+    def _vision_model(self, model_id: str) -> str:
+        """The chosen model if it can read images, otherwise the catalog's vision default:
+        routing by capability, the same idea as the cheap model for classification."""
+        assert self._catalog is not None and self._catalog.defaults.vision  # decode_images checked
+        entry = self._catalog.get(model_id)
+        return model_id if entry and entry.vision else self._catalog.defaults.vision
+
+    def _label(self, model_id: str) -> str:
+        entry = self._catalog.get(model_id) if self._catalog else None
+        return entry.label if entry else model_id
+
+    async def _describe(
+        self, parts: list[ImagePart], question: str, image_ids: list[uuid.UUID], trace: Span
+    ) -> str:
+        """Ask the vision model what the images show, in words search can use. Stored with
+        the images. Failure is not fatal: the answer model still sees the image itself."""
+        assert self._catalog is not None and self._catalog.defaults.vision
+        prompt = self._prompts.render("image_describe", question=question)
+        message = ChatMessage(role="user", content=prompt.text, images=parts)
+        pieces: list[str] = []
+        try:
+            stream = self._gateway.stream_chat(
+                self._catalog.defaults.vision,
+                [message],
+                trace=trace,
+                name="describe_image",
+                prompt_ref=prompt.ref,
+            )
+            async for chunk in stream:
+                if isinstance(chunk, TextDelta):
+                    pieces.append(chunk.text)
+        except LLMError as err:
+            logger.warning("describing the image failed [%s]; searching with the text", err.kind)
+            return ""
+        description = " ".join("".join(pieces).split())[:1500]
+        if description and image_ids:
+            async with self._session_factory() as session:
+                for image_id in image_ids:
+                    image = await session.get(MessageImage, image_id)
+                    if image is not None:
+                        image.description = description
+                await session.commit()
+        return description
+
     async def _history_and_summary(
         self, conversation_id: uuid.UUID, trace: Span
     ) -> tuple[list[ChatMessage], str | None]:
@@ -488,7 +659,12 @@ class ChatService:
                 )
                 .order_by(Message.created_at)
             )
-            messages = [ChatMessage(role=m.role, content=m.content) for m in rows.all()]
+            rows_list = list(rows.all())
+            described = await self._image_notes(session, [m.id for m in rows_list])
+            messages = [
+                ChatMessage(role=m.role, content=m.content + described.get(m.id, ""))
+                for m in rows_list
+            ]
             if self._summarizer is None:
                 return messages[-self._settings.chat_history_limit :], None
 

@@ -1,0 +1,29 @@
+# Turns an uploaded image (chart, diagram, screenshot) into searchable text (Phase 6).
+# Used by ingestion/vision.py. Unlike image_describe (a chat attachment, describe briefly for
+# one question), this text IS the document: search, citations and answers only ever see it.
+
+name: image_index
+description: Describe a knowledge-base image in full, for indexing.
+active: v1
+
+versions:
+  v1:
+    created: 2026-11-08
+    notes: >
+      Phase 6 baseline. Asks for every number in a chart, not just the trend, because
+      questions like "how many hardware tickets?" need the exact value in a chunk.
+    variables: [title]
+    template: |
+      This image is a document called "$title" in a company knowledge base. Write the text
+      that will be indexed for it, so people can find it and get exact answers from it.
+
+      Use Markdown and start with "# " plus the image's own title (or "$title" if it has none).
+      Then:
+      - One sentence: what kind of image it is and what it shows.
+      - All readable text, copied exactly (titles, subtitles, labels, notes, sources).
+      - For a chart: what is measured, the unit, the time period, and EVERY value as a
+        Markdown table (one row per bar, point or slice). Then the main takeaway in one
+        sentence (largest, smallest, trend), using only the numbers shown.
+      - For a diagram: each element and how they connect.
+
+      Do not guess values that are not visible. No preamble.

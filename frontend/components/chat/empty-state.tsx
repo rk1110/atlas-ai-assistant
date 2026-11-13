@@ -1,10 +1,11 @@
 import { Compass } from "lucide-react";
 
+// One per thing Atlas does: a cited answer, keyword search, the graph, and an action.
 const SUGGESTIONS = [
-  "Explain what an LLM token is, with an example",
-  "Give me three tips for writing a clear bug report",
-  "What's the difference between RAG and fine-tuning?",
-  "Draft a short message asking IT to reset my VPN access",
+  "How many weeks of paid parental leave does Acme offer?",
+  "What is an MVC at GitLab?",
+  "Who leads the team that owns the expense policy?",
+  "My laptop screen is broken. Can you open a ticket for me?",
 ];
 
 /** Shown before the first message. Suggestions double as a quick way to try the app. */
@@ -17,7 +18,7 @@ export function EmptyState({ onPick }: { onPick: (text: string) => void }) {
       <div className="flex flex-col gap-1.5">
         <h2 className="text-2xl font-semibold tracking-tight">How can Atlas help?</h2>
         <p className="text-sm text-muted-foreground">
-          Company documents arrive in Phase 2. For now, ask general questions.
+          Ask about Acme&apos;s policies or the GitLab handbook, paste a screenshot, or ask Atlas to act for you.
         </p>
       </div>
       <div className="grid w-full max-w-xl gap-2 sm:grid-cols-2">

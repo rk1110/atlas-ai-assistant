@@ -21,11 +21,13 @@ from api import (
     classify,
     conversations,
     graph,
+    images,
     integrations,
     knowledge,
     memory,
     models,
     outbox,
+    voice,
 )
 from api.deps import SessionDep, get_settings
 from core.embeddings import get_embedder
@@ -79,11 +81,13 @@ app.include_router(chat.router)
 app.include_router(classify.router)
 app.include_router(conversations.router)
 app.include_router(graph.router)
+app.include_router(images.router)
 app.include_router(integrations.router)
 app.include_router(knowledge.router)
 app.include_router(memory.router)
 app.include_router(models.router)
 app.include_router(outbox.router)
+app.include_router(voice.router)
 
 
 class HealthResponse(BaseModel):

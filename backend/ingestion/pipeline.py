@@ -2,7 +2,8 @@
 
     for each Document a source yields:
         1. hash the raw content; unchanged since last time -> skip (re-runs are cheap)
-        2. parse     any format -> clean text with Markdown headings
+        2. parse     any format -> clean text with Markdown headings (scans and images: a vision
+                 model reads them, Phase 6)
         3. chunk     text -> passages of ~350 tokens, each with its heading path
         4. embed     every passage -> a 384-number vector (batched, on CPU)
         5. store     replace the document's old chunks with the new ones, in ONE transaction,
@@ -27,7 +28,8 @@ from core.embeddings import Embedder
 from core.interfaces.data_source import DataSource, Document
 from core.rag_config import ChunkingConfig
 from ingestion.chunkers import ChunkDraft, MarkdownChunker
-from ingestion.parsers import parse
+from ingestion.parsers import parse_document
+from ingestion.vision import VisionReader
 from models import ChunkRecord, DocumentRecord, search_vector
 
 logger = logging.getLogger(__name__)
@@ -60,8 +62,10 @@ class IngestionPipeline:
         embedder: Embedder,
         chunking: ChunkingConfig,
         session_factory: async_sessionmaker[AsyncSession],
+        vision: VisionReader | None = None,
     ):
         self._embedder = embedder
+        self._vision = vision
         self._chunker = MarkdownChunker(chunking, embedder.count_tokens)
         self._session_factory = session_factory
 
@@ -91,7 +95,7 @@ class IngestionPipeline:
 
         await self._upsert_record(document, content_hash, status="processing")
         try:
-            parsed = parse(document)
+            parsed = await parse_document(document, self._vision)
             drafts = self._chunker.chunk(parsed.text)
             vectors = await self._embedder.embed_documents(
                 [embedding_text(parsed.title, d) for d in drafts]

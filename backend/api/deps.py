@@ -28,12 +28,14 @@ from core.interfaces.tool import Tool
 from core.llm import LLMGateway
 from core.memory_config import get_memory_config
 from core.model_catalog import ModelCatalog
+from core.multimodal_config import get_multimodal_config
 from core.prompts import PromptRegistry
 from core.rag_config import RagConfig, get_rag_config
 from core.tracing import Tracer, get_tracer
 from graph.store import GraphStore, get_graph_store
 from ingestion.pipeline import IngestionPipeline
 from ingestion.sources.uploads import UploadSource
+from ingestion.vision import VisionReader
 from retrieval import build_retriever, get_retriever
 from services.chat_service import ChatService
 from services.embedding_map import EmbeddingMapService
@@ -83,6 +85,8 @@ def make_chat_service(retriever: Retriever | None = None, *, rewrite: bool = Tru
         get_long_term_memory(),
         get_summarizer(),
         get_memory_config(),
+        catalog=get_catalog(),
+        multimodal=get_multimodal_config(),
     )
 
 
@@ -163,7 +167,19 @@ def get_classifier() -> IntentClassifier:
 
 @lru_cache
 def get_ingestion_pipeline() -> IngestionPipeline:
-    return IngestionPipeline(get_embedder(), get_rag_config().chunking, get_session_factory())
+    return IngestionPipeline(
+        get_embedder(), get_rag_config().chunking, get_session_factory(), get_vision_reader()
+    )
+
+
+def get_vision_reader() -> VisionReader | None:
+    """Reads scanned PDFs and images at import time; None if no vision model is configured
+    (then scans fail with "no text found", as before Phase 6)."""
+    vision = get_catalog().defaults.vision
+    if vision is None:
+        return None
+    config = get_multimodal_config().ingestion
+    return VisionReader(get_gateway(), get_prompts(), get_tracer(), vision, config)
 
 
 @lru_cache

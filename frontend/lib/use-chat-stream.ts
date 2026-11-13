@@ -18,6 +18,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { type ActivityEntry, BROWSER_API_URL } from "@/lib/api";
+import type { AttachedImage } from "@/lib/images";
 import {
   type AgentStepEvent,
   type ApprovalRequestEvent,
@@ -59,6 +60,8 @@ export interface ChatMessage {
   usage: Usage | null;
   traceUrl: string | null;
   modelId: string | null;
+  /** Images attached to a user message (Phase 6). */
+  images: AttachedImage[];
   /** true for messages created during this visit: only those animate in. */
   live: boolean;
 }
@@ -172,7 +175,11 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
   );
 
   const send = useCallback(
-    async (text: string, modelId: string | null, { retry = false }: { retry?: boolean } = {}) => {
+    async (
+      text: string,
+      modelId: string | null,
+      { retry = false, images = [] }: { retry?: boolean; images?: AttachedImage[] } = {},
+    ) => {
       // Temporary id until the `done` event tells us the id the backend saved it under.
       const assistantId = crypto.randomUUID();
       setMessages((prev) =>
@@ -182,13 +189,20 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
             [...prev.filter((m) => !(m === prev.at(-1) && m.status === "error")), blank(assistantId, "assistant", modelId)]
           : [
               ...prev,
-              { ...blank(crypto.randomUUID(), "user", modelId), content: text, status: "done" },
+              { ...blank(crypto.randomUUID(), "user", modelId), content: text, status: "done", images },
               blank(assistantId, "assistant", modelId),
             ],
       );
       await streamInto(
         "/api/chat",
-        { conversation_id: getConversationId(), message: text, model_id: modelId, retry },
+        {
+          conversation_id: getConversationId(),
+          message: text,
+          model_id: modelId,
+          retry,
+          // A retry sends none: the backend re-reads the images saved with the question.
+          images: images.map((i) => ({ media_type: i.mediaType, data: i.data })),
+        },
         assistantId,
       );
     },
@@ -268,6 +282,7 @@ function blank(id: string, role: ChatMessage["role"], modelId: string | null): C
     usage: null,
     traceUrl: null,
     modelId,
+    images: [],
     live: true,
   };
 }

@@ -1,0 +1,39 @@
+# Multimodal settings (Phase 6). Restart the backend after editing.
+# Which model reads images is `defaults.vision` in config/models.yaml.
+
+images:
+  # Images attached to one chat message. Each one costs the vision model a few hundred
+  # input tokens, and big screenshots are slow to send, so keep both limits modest.
+  max_per_message: 3
+  max_mb: 5
+
+# Reading images while building the knowledge base (Phase 6 checkpoint B).
+ingestion:
+  # Scanned PDF pages (no text layer) are rendered at this resolution and read by the vision
+  # model. 150 DPI keeps small print readable; higher mostly adds image tokens.
+  render_dpi: 150
+  # Each scanned page is one vision call (a few seconds). Pages past this limit are skipped
+  # (with a warning in the logs), so a 300-page scan can't stall an import.
+  max_ocr_pages: 20
+
+# Voice input (Phase 6 checkpoint C): speech-to-text with Whisper, running locally on the
+# backend's CPU (faster-whisper). Audio never leaves the machine and costs nothing per call.
+voice:
+  # Whisper size: tiny (75 MB), base (145 MB), small (480 MB), medium, large-v3. Bigger is
+  # more accurate and slower. Downloaded once into the hf_cache volume on first use.
+  # Compare sizes with: python -m evals.voice_run --model small
+  model: base
+  # int8 = 8-bit weights: ~4x less memory and faster on CPU, with little accuracy loss.
+  compute_type: int8
+  # null = detect the language from the first 30 s; "en" skips detection (faster, English only).
+  language: null
+  # Beam search keeps this many candidate transcripts at each step; 1 = greedy (fastest).
+  beam_size: 5
+  # Whisper's "initial prompt": text it treats as the sentence before the recording, so it
+  # expects these words and spellings ("Jira", not "age era"). Measured 2026-11-08 on the 6
+  # eval clips (base): none 7.7% WER, this sentence 3.8%, a comma-separated glossary 17.3%
+  # (it copied the glossary's capitals: "Water GitLab's Core Value"). Keep it short and natural.
+  # Compare with: python -m evals.voice_run --no-prompt
+  prompt: Acme employees asking Atlas about GitLab, Jira and Slack.
+  max_seconds: 60
+  max_mb: 10

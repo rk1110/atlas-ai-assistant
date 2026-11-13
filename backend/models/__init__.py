@@ -6,7 +6,7 @@ from models.conversation import Conversation
 from models.document import TEXT_SEARCH_CONFIG, ChunkRecord, DocumentRecord, search_vector
 from models.eval import EvalResult, EvalRun
 from models.memory import MemoryRecord
-from models.message import Message
+from models.message import Message, MessageImage
 from models.simulated import SimSlackMessage, SimTicket
 
 __all__ = [
@@ -18,6 +18,7 @@ __all__ = [
     "EvalRun",
     "MemoryRecord",
     "Message",
+    "MessageImage",
     "SimSlackMessage",
     "SimTicket",
     "search_vector",

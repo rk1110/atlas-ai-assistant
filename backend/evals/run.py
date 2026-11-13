@@ -50,7 +50,7 @@ from services.chat_service import AnswerResult, ChatService
 
 RESULTS_DIR = Path(__file__).parent / "results"
 # Question categories (tags) reported separately. Untagged questions count as "core".
-CATEGORIES = ("core", "keyword", "follow-up", "relational", "paraphrase")
+CATEGORIES = ("core", "keyword", "follow-up", "relational", "paraphrase", "multimodal")
 
 
 async def run(

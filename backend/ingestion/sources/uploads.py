@@ -22,6 +22,11 @@ CONTENT_TYPES: dict[str, ContentType] = {
     ".html": "html",
     ".htm": "html",
     ".pdf": "pdf",
+    # Phase 6: a vision model describes images (charts, diagrams, screenshots) at import time.
+    ".png": "image",
+    ".jpg": "image",
+    ".jpeg": "image",
+    ".webp": "image",
 }
 UNSAFE_CHARACTERS = re.compile(r"[^A-Za-z0-9._-]+")
 
@@ -51,13 +56,17 @@ class UploadSource(DataSource):
             raise ValueError(f"'{filename}' is not a supported file type ({allowed})")
         return name
 
+    def is_image(self, filename: str) -> bool:
+        return CONTENT_TYPES.get(Path(filename).suffix.lower()) == "image"
+
     def document_id(self, filename: str) -> str:
         return f"{self.name}:{filename}"
 
     async def document(self, path: Path) -> Document:
         content_type = CONTENT_TYPES[path.suffix.lower()]
         raw = await anyio.Path(path).read_bytes()
-        content: str | bytes = raw if content_type == "pdf" else raw.decode("utf-8", "replace")
+        binary = content_type in ("pdf", "image")
+        content: str | bytes = raw if binary else raw.decode("utf-8", "replace")
         title = path.stem.replace("-", " ").replace("_", " ").strip() or path.name
         if content_type == "markdown" and isinstance(content, str):
             meta, _ = split_front_matter(content)

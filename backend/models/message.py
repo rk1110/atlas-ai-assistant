@@ -10,7 +10,17 @@ from datetime import datetime
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Index, Numeric, String, Text, func
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    ForeignKey,
+    Index,
+    LargeBinary,
+    Numeric,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -56,3 +66,25 @@ class Message(Base):
     agent: Mapped[dict[str, Any] | None] = mapped_column(JSONB)
 
     conversation: Mapped["Conversation"] = relationship(back_populates="messages")
+
+
+class MessageImage(Base):
+    """An image attached to a user message (Phase 6).
+
+    Stored in Postgres (principle 5: one database) rather than on disk: images are small
+    (limited in config/multimodal.yaml), always read with their message, and deleted with it.
+    """
+
+    __tablename__ = "message_images"
+    __table_args__ = (Index("ix_message_images_message", "message_id", "ordinal"),)
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    message_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("messages.id", ondelete="CASCADE"))
+    ordinal: Mapped[int]  # order within the message
+    media_type: Mapped[str] = mapped_column(String(32))  # sniffed from the bytes, not trusted
+    data: Mapped[bytes] = mapped_column(LargeBinary)
+    size_bytes: Mapped[int]
+    # What the vision model saw. Older turns are re-sent to the model as this text instead of
+    # the image itself: cheaper, and the model doesn't need to look again.
+    description: Mapped[str | None] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

@@ -72,6 +72,8 @@ export interface StoredMessage {
   citations: CitationEvent[];
   /** Agent answers (Phase 4): steps, tool calls and approval cards, as saved by the backend. */
   agent: StoredAgentLog | null;
+  /** Images attached to a user message (Phase 6); the bytes come from GET /api/images/{id}. */
+  images: { id: string; media_type: string; description: string | null }[];
 }
 
 // ---- Knowledge Base (backend/api/knowledge.py) ----
@@ -271,6 +273,14 @@ export interface Analytics {
   usage: UsageDay[];
 }
 
+/** POST /api/voice/transcribe (mirrors core/speech.py Transcript). */
+export interface Transcript {
+  text: string;
+  language: string;
+  duration_seconds: number;
+  latency_ms: number;
+}
+
 export class ApiError extends Error {
   constructor(
     public status: number,
@@ -330,6 +340,14 @@ export const api = {
     const body = new FormData();
     body.append("file", file);
     return request<KnowledgeDocument>("/api/knowledge/uploads", { method: "POST", body });
+  },
+
+  /** Speech to text (Phase 6): a recorded question, transcribed by Whisper on the backend. */
+  transcribe: (audio: Blob) => {
+    const body = new FormData();
+    const extension = audio.type.includes("mp4") ? "mp4" : audio.type.includes("ogg") ? "ogg" : "webm";
+    body.append("audio", audio, `question.${extension}`);
+    return request<Transcript>("/api/voice/transcribe", { method: "POST", body });
   },
 
   graph: () => request<GraphSnapshot>("/api/graph"),

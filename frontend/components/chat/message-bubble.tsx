@@ -6,8 +6,10 @@ import { AnswerMarkdown } from "@/components/chat/answer-markdown";
 import { ApprovalCard } from "@/components/chat/approval-card";
 import { CitationList } from "@/components/chat/citation-list";
 import { ErrorBanner } from "@/components/chat/error-banner";
+import { ImageThumbnails } from "@/components/chat/image-thumbnails";
 import { MessageMeta } from "@/components/chat/message-meta";
 import { MessageSteps } from "@/components/chat/message-steps";
+import { SpeakButton } from "@/components/chat/speak-button";
 import { ToolCallList } from "@/components/chat/tool-call-list";
 import type { ApprovalDecision, ChatMessage } from "@/lib/use-chat-stream";
 
@@ -31,7 +33,8 @@ export function MessageBubble({
   const enter = message.live ? { opacity: 0, y: 6 } : false;
   if (message.role === "user") {
     return (
-      <motion.div initial={enter} animate={{ opacity: 1, y: 0 }} className="flex justify-end">
+      <motion.div initial={enter} animate={{ opacity: 1, y: 0 }} className="flex flex-col items-end gap-1.5">
+        <ImageThumbnails images={message.images} className="justify-end" />
         <div className="max-w-[85%] rounded-2xl rounded-br-md bg-primary px-4 py-2.5 whitespace-pre-wrap text-primary-foreground">
           {message.content}
         </div>
@@ -60,7 +63,12 @@ export function MessageBubble({
       <CitationList citations={message.citations} />
       {message.status === "stopped" && <p className="text-xs text-muted-foreground">Stopped.</p>}
       {message.error && <ErrorBanner error={message.error} onRetry={onRetry} />}
-      {message.status !== "streaming" && <MessageMeta usage={message.usage} traceUrl={message.traceUrl} />}
+      {message.status !== "streaming" && (
+        <div className="flex items-center gap-1">
+          <SpeakButton id={message.id} text={message.content} />
+          <MessageMeta usage={message.usage} traceUrl={message.traceUrl} />
+        </div>
+      )}
     </motion.div>
   );
 }

@@ -1,4 +1,5 @@
 import type { StoredMessage } from "@/lib/api";
+import { storedImage } from "@/lib/images";
 import type { ChatMessage } from "@/lib/use-chat-stream";
 
 /** Convert a message loaded from the database into the shape the chat UI renders. */
@@ -31,6 +32,7 @@ export function toChatMessage(m: StoredMessage): ChatMessage {
         : null,
     traceUrl: m.trace_url,
     modelId: m.model_id,
+    images: (m.images ?? []).map(storedImage),
     live: false, // history renders immediately, without a fade-in
   };
 }
