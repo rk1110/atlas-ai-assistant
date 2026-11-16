@@ -1,0 +1,34 @@
+# Login, permissions and rate limits (Phase 7). Restart the backend after editing, then run
+#   docker compose exec backend python -m scripts.seed_users
+# to create or update the users. Their shared password is DEMO_PASSWORD in .env.
+
+session:
+  # How long a login lasts. The cookie and the signed token inside it expire together.
+  hours: 12
+  # Send the cookie over HTTPS only. Must be false for http://localhost; true when deployed.
+  secure_cookie: false
+
+# Demo accounts: fictional Acme employees. `access` = the document access tags they may read.
+# Every document is tagged (front matter `access:` in data/acme, default "public"), and search
+# only ever returns documents that share a tag with the user (permission-aware retrieval).
+users:
+  - email: sam@acme.example
+    name: Sam Okoye
+    role: Backend engineer, Pune
+    access: [public]
+    # Chats and memories from before login existed (Phase 1-7A) are given to this user.
+    owns_existing_data: true
+  - email: grace@acme.example
+    name: Grace Liu
+    role: Head of People
+    access: [public, hr]
+  - email: elena@acme.example
+    name: Elena Petrova
+    role: Finance Manager
+    access: [public, finance]
+
+rate_limits:
+  # Per user. Chat messages, approvals and voice transcriptions all count.
+  # Per minute stops a runaway script; per day caps what one account can cost.
+  per_minute: 10
+  per_day: 200

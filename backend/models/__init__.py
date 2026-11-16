@@ -8,6 +8,7 @@ from models.eval import EvalResult, EvalRun
 from models.memory import MemoryRecord
 from models.message import Message, MessageImage
 from models.simulated import SimSlackMessage, SimTicket
+from models.user import User
 
 __all__ = [
     "TEXT_SEARCH_CONFIG",
@@ -21,5 +22,6 @@ __all__ = [
     "MessageImage",
     "SimSlackMessage",
     "SimTicket",
+    "User",
     "search_vector",
 ]

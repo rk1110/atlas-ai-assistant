@@ -89,6 +89,8 @@ export interface KnowledgeDocument {
   status: DocumentStatus;
   error: string | null;
   chunk_count: number;
+  /** Chunks held back by the prompt-injection scan (Phase 7). */
+  quarantined_chunks: number;
   updated_at: string;
 }
 
@@ -97,6 +99,8 @@ export interface DocumentChunk {
   heading: string | null;
   text: string;
   token_count: number;
+  /** Why retrieval skips this chunk; null = safe (Phase 7). */
+  quarantine_reason: string | null;
 }
 
 export interface DocumentDetail {
@@ -297,9 +301,43 @@ function baseUrl(): string {
   return onServer ? (process.env.API_INTERNAL_URL ?? BROWSER_API_URL) : BROWSER_API_URL;
 }
 
+/**
+ * Phase 7 login. In the browser, `credentials: "include"` sends the httpOnly session cookie
+ * the backend set (the page's JavaScript never sees it). In Server Components there's no
+ * browser, so lib/server-session.ts registers a hook that forwards the incoming request's
+ * cookie, and sends you to /login when the backend says 401.
+ */
+interface ServerSession {
+  cookieHeader: () => Promise<string>;
+  onUnauthorized: () => never;
+}
+let serverSession: ServerSession | null = null;
+
+export function registerServerSession(session: ServerSession): void {
+  serverSession = session;
+}
+
+/** Where to go after a 401 in the browser: the login page, then back here. */
+export function loginUrl(): string {
+  const back = typeof window === "undefined" ? "/" : window.location.pathname;
+  return `/login?next=${encodeURIComponent(back)}`;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const onServer = typeof window === "undefined";
+  const headers = new Headers(init?.headers);
+  if (onServer && serverSession) headers.set("cookie", await serverSession.cookieHeader());
   // no-store: chat data changes constantly; never serve a cached copy.
-  const response = await fetch(`${baseUrl()}${path}`, { cache: "no-store", ...init });
+  const response = await fetch(`${baseUrl()}${path}`, {
+    cache: "no-store",
+    credentials: "include",
+    ...init,
+    headers,
+  });
+  if (response.status === 401 && !path.startsWith("/api/auth/")) {
+    if (onServer && serverSession) serverSession.onUnauthorized();
+    if (!onServer) window.location.assign(loginUrl());
+  }
   if (!response.ok) {
     throw new ApiError(response.status, await errorMessage(response, `${init?.method ?? "GET"} ${path} failed (${response.status})`));
   }
@@ -318,7 +356,25 @@ async function errorMessage(response: Response, fallback: string): Promise<strin
 
 const query = (params: Record<string, string>) => new URLSearchParams(params).toString();
 
+/** The logged-in user (backend api.deps.CurrentUser). */
+export interface CurrentUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string | null;
+  access_tags: string[];
+}
+
 export const api = {
+  login: (email: string, password: string) =>
+    request<CurrentUser>("/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email, password }),
+    }),
+  logout: () => request<void>("/api/auth/logout", { method: "POST" }),
+  me: () => request<CurrentUser>("/api/auth/me"),
+
   models: () => request<ModelsResponse>("/api/models"),
   conversations: () => request<ConversationSummary[]>("/api/conversations"),
   messages: (conversationId: string) =>

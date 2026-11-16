@@ -11,18 +11,18 @@ import uuid
 
 from fastapi import APIRouter, HTTPException, status
 
-from api.deps import MemoryDep
+from api.deps import CurrentUserDep, MemoryDep
 from services.memory import MemoryItem
 
 router = APIRouter(prefix="/api/memories", tags=["memory"])
 
 
 @router.get("")
-async def list_memories(memory: MemoryDep) -> list[MemoryItem]:
-    return await memory.all()
+async def list_memories(memory: MemoryDep, user: CurrentUserDep) -> list[MemoryItem]:
+    return await memory.all(user.id)
 
 
 @router.delete("/{memory_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def forget(memory_id: uuid.UUID, memory: MemoryDep) -> None:
-    if not await memory.forget(memory_id):
+async def forget(memory_id: uuid.UUID, memory: MemoryDep, user: CurrentUserDep) -> None:
+    if not await memory.forget(memory_id, user.id):
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Memory not found")

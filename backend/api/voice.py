@@ -8,7 +8,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
-from api.deps import TracerDep
+from api.deps import RateLimitedUserDep, TracerDep
 from core.speech import (
     SpeechModelUnavailableError,
     Transcriber,
@@ -24,7 +24,7 @@ TranscriberDep = Annotated[Transcriber, Depends(get_transcriber)]
 
 @router.post("/transcribe")
 async def transcribe(
-    audio: UploadFile, transcriber: TranscriberDep, tracer: TracerDep
+    audio: UploadFile, transcriber: TranscriberDep, tracer: TracerDep, user: RateLimitedUserDep
 ) -> Transcript:
     max_bytes = int(transcriber.config.max_mb * 1024 * 1024)
     data = await audio.read(max_bytes + 1)
@@ -37,6 +37,7 @@ async def transcribe(
         "transcribe",
         input={"type": audio.content_type, "kb": len(data) // 1024},
         metadata={"model": f"whisper-{transcriber.config.model}"},
+        user_id=str(user.id),
     )
     try:
         transcript = await transcriber.transcribe(data)

@@ -22,7 +22,7 @@ from services.memory import (
     MemoryItem,
     format_memory,
 )
-from tests.conftest import FakeEmbedder, FakeGateway, FakeRetriever
+from tests.conftest import TEST_USER, FakeEmbedder, FakeGateway, FakeRetriever
 from tests.test_chat import chat
 
 COMPLETION = Completion(
@@ -111,7 +111,7 @@ async def test_old_messages_are_folded_into_a_summary(db: None, fake_retriever: 
 
 async def test_memories_api(client: AsyncClient, fake_embedder: FakeEmbedder):
     memory = make_memory(ExtractingGateway(["Prefers short answers."]), fake_embedder)
-    await memory.remember("keep it short please", uuid.uuid4())
+    await memory.remember("keep it short please", uuid.uuid4(), TEST_USER.id)
     app.dependency_overrides[get_long_term_memory] = lambda: memory
 
     [item] = (await client.get("/api/memories")).json()
@@ -122,7 +122,7 @@ async def test_memories_api(client: AsyncClient, fake_embedder: FakeEmbedder):
 
 async def test_chat_shows_and_uses_recalled_memories(db: None, fake_embedder: FakeEmbedder):
     memory = make_memory(ExtractingGateway(["Works in the Pune office."]), fake_embedder)
-    await memory.remember("I work in Pune", uuid.uuid4())
+    await memory.remember("I work in Pune", uuid.uuid4(), TEST_USER.id)
     gateway = FakeGateway()
     service = ChatService(
         gateway, get_prompts(), get_settings(), get_session_factory(),

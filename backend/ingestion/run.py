@@ -24,7 +24,8 @@ from ingestion.sources import build_sources
 
 def _print_result(result: DocumentResult) -> None:
     detail = {
-        "ingested": f"{result.chunks:3} chunks  {result.seconds:5.1f} s",
+        "ingested": f"{result.chunks:3} chunks  {result.seconds:5.1f} s"
+        + (f"  QUARANTINED {result.quarantined}" if result.quarantined else ""),
         "skipped": "unchanged",
         "failed": f"FAILED: {result.error}",
     }[result.outcome]

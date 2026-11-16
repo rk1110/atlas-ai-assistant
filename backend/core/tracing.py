@@ -165,10 +165,14 @@ class Tracer:
         session_id: str | None = None,
         tags: list[str] | None = None,
         metadata: dict[str, Any] | None = None,
+        user_id: str | None = None,
     ) -> Span:
         """Start a new trace. `session_id` groups traces: we use the conversation id, so
         Langfuse's Sessions view shows a whole conversation turn by turn."""
-        attributes = {"trace_name": name, "session_id": session_id, "tags": tags}
+        # user_id (Phase 7): Langfuse's Users view then shows each person's traces and cost.
+        attributes = {
+            "trace_name": name, "session_id": session_id, "tags": tags, "user_id": user_id,
+        }  # fmt: skip
         attributes = {k: v for k, v in attributes.items() if v is not None}
         if self._client is None:
             return Span(None, attributes)

@@ -6,6 +6,7 @@ import { CloseSidebarOnNavigate } from "@/components/close-sidebar-on-navigate";
 import { ConversationList } from "@/components/conversation-list";
 import { NavMain } from "@/components/nav-main";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { UserMenu } from "@/components/user-menu";
 import {
   Sidebar,
   SidebarContent,
@@ -68,6 +69,7 @@ export function AppSidebar() {
           </Suspense>
         </SidebarContent>
         <SidebarFooter>
+          <UserMenu />
           <ThemeToggle />
         </SidebarFooter>
         <SidebarRail />

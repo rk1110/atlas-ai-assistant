@@ -24,10 +24,12 @@ from datetime import datetime
 import anyio
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, UploadFile, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import ColumnElement, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.deps import (
+    CurrentUser,
+    CurrentUserDep,
     EmbeddingMapDep,
     IngestionPipelineDep,
     RagConfigDep,
@@ -57,6 +59,7 @@ class DocumentOut(BaseModel):
     status: str  # pending | processing | ready | failed
     error: str | None
     chunk_count: int
+    quarantined_chunks: int = 0  # Phase 7: held back by the injection scan
     updated_at: datetime
 
 
@@ -65,6 +68,7 @@ class ChunkOut(BaseModel):
     heading: str | None
     text: str
     token_count: int
+    quarantine_reason: str | None = None  # Phase 7: why retrieval skips this chunk
 
 
 class DocumentDetail(BaseModel):
@@ -108,26 +112,48 @@ async def knowledge_config(config: RagConfigDep, source: UploadSourceDep) -> Kno
 
 
 @router.get("/documents")
-async def list_documents(session: SessionDep) -> list[DocumentOut]:
+async def list_documents(session: SessionDep, user: CurrentUserDep) -> list[DocumentOut]:
+    """The documents this user may read (Phase 7): a restricted document's title is
+    information too, so it isn't listed for others."""
     rows = await session.scalars(
-        select(DocumentRecord).order_by(DocumentRecord.source, DocumentRecord.title)
+        select(DocumentRecord)
+        .where(_readable_by(user))
+        .order_by(DocumentRecord.source, DocumentRecord.title)
     )
-    return [_document_out(d) for d in rows.all()]
+    quarantined = dict(
+        (
+            await session.execute(
+                select(ChunkRecord.document_id, func.count())
+                .where(ChunkRecord.quarantine_reason.is_not(None))
+                .group_by(ChunkRecord.document_id)
+            )
+        ).all()
+    )
+    return [_document_out(d, quarantined.get(d.id, 0)) for d in rows.all()]
 
 
 @router.get("/chunks")
-async def document_chunks(session: SessionDep, document_id: str = Query()) -> DocumentDetail:
-    document = await _get_document(session, document_id)
+async def document_chunks(
+    session: SessionDep, user: CurrentUserDep, document_id: str = Query()
+) -> DocumentDetail:
+    document = await _get_document(session, document_id, user=user)
     rows = await session.scalars(
         select(ChunkRecord)
         .where(ChunkRecord.document_id == document_id)
         .order_by(ChunkRecord.ordinal)
     )
     chunks = [
-        ChunkOut(ordinal=c.ordinal, heading=c.heading, text=c.text, token_count=c.token_count)
+        ChunkOut(
+            ordinal=c.ordinal,
+            heading=c.heading,
+            text=c.text,
+            token_count=c.token_count,
+            quarantine_reason=c.quarantine_reason,
+        )
         for c in rows.all()
     ]
-    return DocumentDetail(document=_document_out(document), chunks=chunks)
+    held_back = sum(1 for c in chunks if c.quarantine_reason)
+    return DocumentDetail(document=_document_out(document, held_back), chunks=chunks)
 
 
 @router.post("/uploads", status_code=status.HTTP_202_ACCEPTED)
@@ -199,9 +225,14 @@ async def search(
 
 
 @router.get("/map")
-async def embedding_map(maps: EmbeddingMapDep) -> EmbeddingMap:
-    """Every chunk as a point in 2D: chunks that mean similar things land close together."""
-    return EmbeddingMap(method=maps.method, points=await maps.points())
+async def embedding_map(
+    maps: EmbeddingMapDep, session: SessionDep, user: CurrentUserDep
+) -> EmbeddingMap:
+    """Every chunk as a point in 2D: chunks that mean similar things land close together.
+    The map is computed once for all chunks; each user gets only the readable points."""
+    readable = set(await session.scalars(select(DocumentRecord.id).where(_readable_by(user))))
+    points = [p for p in await maps.points() if p.document_id in readable]
+    return EmbeddingMap(method=maps.method, points=points)
 
 
 async def _ingest_in_background(
@@ -213,15 +244,28 @@ async def _ingest_in_background(
 
 
 async def _get_document(
-    session: AsyncSession, document_id: str, refresh: bool = False
+    session: AsyncSession,
+    document_id: str,
+    refresh: bool = False,
+    user: CurrentUser | None = None,
 ) -> DocumentRecord:
     document = await session.get(DocumentRecord, document_id, populate_existing=refresh)
-    if document is None:
+    hidden = (
+        document is not None
+        and user is not None
+        and not set(document.access_tags) & set(user.access_tags)
+    )
+    if document is None or hidden:  # the same 404 either way: don't confirm it exists
         raise HTTPException(status.HTTP_404_NOT_FOUND, "Document not found")
     return document
 
 
-def _document_out(d: DocumentRecord) -> DocumentOut:
+def _readable_by(user: CurrentUser) -> ColumnElement[bool]:
+    """Documents sharing at least one access tag with the user (Postgres array overlap, &&)."""
+    return DocumentRecord.access_tags.overlap(user.access_tags)
+
+
+def _document_out(d: DocumentRecord, quarantined_chunks: int = 0) -> DocumentOut:
     return DocumentOut(
         id=d.id,
         source=d.source,
@@ -231,5 +275,6 @@ def _document_out(d: DocumentRecord) -> DocumentOut:
         status=d.status,
         error=d.error,
         chunk_count=d.chunk_count,
+        quarantined_chunks=quarantined_chunks,
         updated_at=d.updated_at,
     )

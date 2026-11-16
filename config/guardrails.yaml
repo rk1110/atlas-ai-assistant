@@ -1,0 +1,35 @@
+# Guardrails (Phase 7). Restart the backend after editing.
+# Three layers, because no single one is reliable on its own ("defence in depth"):
+#   1. at ingestion: scan every chunk for prompt injection; quarantine suspicious ones
+#   2. in the prompt: sources are fenced as data, with explicit rules (prompts/chat_system.yaml)
+#   3. after the answer: flag links and email addresses that no source contains
+
+injection:
+  enabled: true
+  # Layer 1a, regex heuristics: free and instant, but only catch known phrasings.
+  # Layer 1b, an LLM classifier (the cheap model) reads every chunk, in batches, and decides.
+  # It catches paraphrased attacks and lets innocent text that merely mentions "ignore
+  # previous instructions" (a security training page) through.
+  llm_scan: true
+  # Chunks per classifier call: fewer calls, but a long batch can make the model sloppier.
+  batch_size: 8
+  # null = the catalog's cheap model (defaults.cheap in models.yaml).
+  model: null
+
+pii:
+  enabled: true
+  # Presidio entity types masked in user messages before any model, log or trace sees them.
+  # PERSON is deliberately off: Atlas answers questions about colleagues by name
+  # ("Who is Priya Nair?"), and masking names would break that. LOCATION too ("Pune office").
+  entities: [EMAIL_ADDRESS, PHONE_NUMBER, CREDIT_CARD, IBAN_CODE, US_SSN, IP_ADDRESS]
+  # Company addresses are not personal data and appear in questions ("email security@...").
+  allow_email_domains: [acme.example]
+  # Presidio gives each match a confidence (0-1). Below this it's ignored. A bare phone number
+  # scores ~0.4; words like "phone" or "call" nearby raise it ("context enhancement"). Measured
+  # 2026-11-13 on evals/guardrails/pii.yaml: 0.5 caught 6/10 (missed "mail me at ... or
+  # +31 6 1234 5678"), 0.4 caught 9/10 with no ordinary numbers masked; 0.3 changed nothing.
+  min_score: 0.4
+
+output:
+  # Layer 3: warn when an answer contains a link or email address found in no source.
+  enabled: true

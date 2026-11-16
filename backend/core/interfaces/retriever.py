@@ -38,6 +38,9 @@ class RetrievalFilters(BaseModel):
     sources: list[str] | None = None  # DataSource names
     metadata: dict[str, Any] = Field(default_factory=dict)  # exact-match filters
     access_tags: list[str] | None = None  # Phase 7: only documents the user may see
+    # Phase 7: quarantined chunks (suspected prompt injection) are never retrieved, except
+    # by the guardrail eval, which measures what happens without the quarantine.
+    include_quarantined: bool = False
 
 
 class Retriever(ABC):

@@ -15,13 +15,17 @@ import asyncio
 import hashlib
 import time
 
+from sqlalchemy import select
+
 from api.deps import get_catalog, get_gateway, get_prompts, get_tracer
+from core.db import get_session_factory
 from core.llm import LLMError
 from core.rag_config import get_rag_config
 from graph.extract import GraphExtractor
 from graph.store import get_graph_store
 from ingestion.parsers import parse
 from ingestion.sources import build_sources
+from models import ChunkRecord
 
 
 async def build(force: bool) -> int:
@@ -37,12 +41,23 @@ async def build(force: bool) -> int:
     started = time.perf_counter()
     totals = {"extracted": 0, "unchanged": 0, "failed": 0, "entities": 0, "relations": 0}
     sources = [s for s in build_sources(config) if s.name in config.graph.sources]
+    quarantined = await _quarantined_documents()
     print(f"Graph build · model {model_id} · sources {', '.join(s.name for s in sources)}\n")
     for source in sources:
         async for document in source.load():
             if document.content_type in ("pdf", "image"):
                 # Scans and charts need a vision call to become text; the graph sticks to
                 # typed documents rather than pay for that OCR a second time.
+                continue
+            if document.access_tags != ["public"]:
+                # Phase 7: graph search can't check who's asking, so restricted documents
+                # (HR salaries, finance plans) must never become graph facts.
+                print(f"  skipped   {document.id}: restricted to {document.access_tags}")
+                continue
+            if document.id in quarantined:
+                # Phase 7: the injection scan flagged part of it. The graph reads whole
+                # documents, so it would carry the attack into graph answers.
+                print(f"  skipped   {document.id}: has quarantined chunks (run ingestion first)")
                 continue
             raw = document.content
             data = raw if isinstance(raw, bytes) else raw.encode()
@@ -78,6 +93,16 @@ async def build(force: bool) -> int:
     print(f"Graph now: {len(snapshot.nodes)} entities, {len(snapshot.edges)} relations")
     get_tracer().flush()
     return 1 if totals["failed"] else 0
+
+
+async def _quarantined_documents() -> set[str]:
+    async with get_session_factory()() as session:
+        rows = await session.scalars(
+            select(ChunkRecord.document_id)
+            .where(ChunkRecord.quarantine_reason.is_not(None))
+            .distinct()
+        )
+        return set(rows)
 
 
 def main() -> None:

@@ -37,6 +37,11 @@ class Settings(BaseSettings):
         None  # pytest swaps this in for database_url (tests/conftest.py)
     )
     redis_url: str | None = None
+
+    # --- Login (Phase 7) ---
+    # Signs the session tokens: anyone who has it can log in as anyone. 32+ random bytes.
+    auth_secret: SecretStr | None = None
+    demo_password: SecretStr | None = None  # shared by the demo accounts (scripts.seed_users)
     # GraphRAG (Phase 3). No password = graph features off; the rest of the app still works.
     neo4j_uri: str = "bolt://localhost:7687"
     neo4j_user: str = "neo4j"

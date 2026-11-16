@@ -6,6 +6,7 @@ import { AnswerMarkdown } from "@/components/chat/answer-markdown";
 import { ApprovalCard } from "@/components/chat/approval-card";
 import { CitationList } from "@/components/chat/citation-list";
 import { ErrorBanner } from "@/components/chat/error-banner";
+import { GuardrailWarnings } from "@/components/chat/guardrail-warnings";
 import { ImageThumbnails } from "@/components/chat/image-thumbnails";
 import { MessageMeta } from "@/components/chat/message-meta";
 import { MessageSteps } from "@/components/chat/message-steps";
@@ -60,6 +61,7 @@ export function MessageBubble({
       ) : (
         message.content && <AnswerMarkdown content={message.content} citations={message.citations} />
       )}
+      <GuardrailWarnings steps={message.steps} />
       <CitationList citations={message.citations} />
       {message.status === "stopped" && <p className="text-xs text-muted-foreground">Stopped.</p>}
       {message.error && <ErrorBanner error={message.error} onRetry={onRetry} />}

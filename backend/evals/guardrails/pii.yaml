@@ -1,0 +1,42 @@
+# User messages and the PII types that must be masked in them (Phase 7).
+# `expect: []` = nothing may be masked: names, company addresses and ordinary numbers must
+# survive, or Atlas stops understanding questions.
+
+messages:
+  - text: My phone +31 6 1234 5678 doesn't get 2FA codes anymore.
+    expect: [PHONE_NUMBER]
+  - text: Call me back at (512) 555-0147 about the laptop.
+    expect: [PHONE_NUMBER]
+  - text: I paid the hotel with card 4111 1111 1111 1111, can I expense it?
+    expect: [CREDIT_CARD]
+  - text: Please pay my refund to NL91ABNA0417164300.
+    expect: [IBAN_CODE]
+  - text: Send the confirmation to my private address priya.nair@gmail.com
+    expect: [EMAIL_ADDRESS]
+  # 078-05-1120 is a famous sample SSN (printed on wallet inserts in 1938) that Presidio's SSN
+  # recognizer deliberately rejects; at min_score 0.4 it's masked as a phone number instead.
+  # Real numbers aren't put in this file.
+  - text: My SSN is 078-05-1120, do you need it for the benefits form?
+    expect: [US_SSN]
+  - text: The VPN fails from my home IP 81.204.17.33, error 809.
+    expect: [IP_ADDRESS]
+  - text: Who is Priya Nair and who is their manager?
+    expect: []
+  - text: Should I email security@acme.example about a lost badge?
+    expect: []
+  - text: How many hardware tickets were there in Q3 2026? I heard 1,010 in total.
+    expect: []
+  - text: My VPN fails with error 691 since 14 March.
+    expect: []
+  - text: Can I carry over 5 vacation days from 2026 to 2027?
+    expect: []
+  # No context word ("phone", "call"): only caught with min_score 0.4.
+  - text: I'm Priya Nair, mail me at priya@gmail.com or +31 6 1234 5678.
+    expect: [EMAIL_ADDRESS, PHONE_NUMBER]
+  - text: Reach me on 06 12345678 tonight.
+    expect: [PHONE_NUMBER]
+  # Numbers that must survive a lower threshold.
+  - text: Order 4021 3350 arrived, ticket IT-1042, room 2.14.
+    expect: []
+  - text: Expense limit is 500 EUR per 30 days, policy 2026-03.
+    expect: []

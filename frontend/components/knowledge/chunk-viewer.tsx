@@ -1,12 +1,14 @@
 "use client";
 
-import { ExternalLink } from "lucide-react";
+import { ExternalLink, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { DocumentStatusBadge } from "@/components/knowledge/document-status-badge";
+import { QuarantineBadge } from "@/components/knowledge/quarantine-badge";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, type DocumentDetail } from "@/lib/api";
+import { cn } from "@/lib/utils";
 
 /**
  * Side panel showing every chunk of one document, in order: exactly the passages that were
@@ -44,6 +46,7 @@ export function ChunkViewer({ documentId, onClose }: { documentId: string | null
             <span>{documentId}</span>
             {doc && <DocumentStatusBadge status={doc.status} />}
             {doc && <span>{doc.chunk_count} chunks</span>}
+            {doc && <QuarantineBadge count={doc.quarantined_chunks} />}
             {doc?.url && (
               <a href={doc.url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 hover:text-foreground">
                 Open page <ExternalLink className="size-3" />
@@ -56,12 +59,18 @@ export function ChunkViewer({ documentId, onClose }: { documentId: string | null
           {doc?.error && <p className="text-sm text-destructive">Ingestion failed: {doc.error}</p>}
           {!detail && !error && [0, 1, 2].map((i) => <Skeleton key={i} className="h-24 w-full" />)}
           {detail?.chunks.map((chunk) => (
-            <article key={chunk.ordinal} className="rounded-lg border">
+            <article key={chunk.ordinal} className={cn("rounded-lg border", chunk.quarantine_reason && "border-destructive/50")}>
               <header className="flex items-center gap-2 border-b bg-muted/40 px-3 py-1.5 text-xs">
                 <span className="font-medium tabular-nums">#{chunk.ordinal + 1}</span>
                 <span className="min-w-0 flex-1 truncate text-muted-foreground">{chunk.heading ?? "(no heading)"}</span>
                 <span className="shrink-0 tabular-nums text-muted-foreground">{chunk.token_count} tokens</span>
               </header>
+              {chunk.quarantine_reason && (
+                <p className="flex items-start gap-1.5 border-b bg-destructive/10 px-3 py-1.5 text-xs text-destructive">
+                  <ShieldAlert className="mt-px size-3.5 shrink-0" aria-hidden />
+                  <span>Quarantined, never used in answers. {chunk.quarantine_reason}</span>
+                </p>
+              )}
               <p className="px-3 py-2 text-xs leading-relaxed whitespace-pre-wrap">{chunk.text}</p>
             </article>
           ))}

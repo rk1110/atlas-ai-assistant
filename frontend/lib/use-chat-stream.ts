@@ -17,7 +17,7 @@
 
 import { useCallback, useRef, useState } from "react";
 
-import { type ActivityEntry, BROWSER_API_URL } from "@/lib/api";
+import { type ActivityEntry, BROWSER_API_URL, loginUrl } from "@/lib/api";
 import type { AttachedImage } from "@/lib/images";
 import {
   type AgentStepEvent,
@@ -144,7 +144,12 @@ export function useChatStream({ getConversationId, initialMessages, onTurnEnd }:
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(body),
           signal: controller.signal,
+          credentials: "include", // the session cookie (Phase 7)
         });
+        if (response.status === 401) {
+          window.location.assign(loginUrl());
+          return;
+        }
         if (!response.ok || !response.body) {
           // Rejected before streaming started (400 unknown model, 404 stale approval, 422 invalid input).
           handle(httpError(response.status, await response.text()));

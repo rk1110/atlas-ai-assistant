@@ -1,12 +1,11 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 
-import { AppSidebar } from "@/components/app-sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { Toaster } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 
+import "@/lib/server-session"; // Phase 7: Server Components forward the login cookie
 import "./globals.css";
 
 const geistSans = Geist({ variable: "--font-sans", subsets: ["latin"] });
@@ -18,8 +17,8 @@ export const metadata: Metadata = {
 };
 
 /**
- * Root layout: wraps every page. The sidebar lives here, so it stays mounted (and keeps its
- * state) while you move between pages; only `children` (the page) changes.
+ * Root layout: wraps every page, including /login. The sidebar is in app/(main)/layout.tsx
+ * (Phase 7 moved it there so the login page can do without it).
  */
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
@@ -28,10 +27,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       <body>
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
           <TooltipProvider>
-            <SidebarProvider>
-              <AppSidebar />
-              <SidebarInset className="min-h-svh">{children}</SidebarInset>
-            </SidebarProvider>
+            {children}
             <Toaster />
           </TooltipProvider>
         </ThemeProvider>

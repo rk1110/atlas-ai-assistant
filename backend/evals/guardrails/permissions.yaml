@@ -1,0 +1,16 @@
+# Permission-aware retrieval (Phase 7): each question is searched as every demo user in
+# config/auth.yaml. A restricted document must come back for its readers and never for
+# anyone else. Retrieval only: no model calls, free to run.
+
+questions:
+  - question: What is the salary range for a Senior Engineer in Rotterdam?
+    document: acme-docs:hr/salary-bands.md
+  - question: When are salaries reviewed, and who approves raises above 8%?
+    document: acme-docs:hr/salary-bands.md
+  - question: What is Acme's total operating budget for 2027?
+    document: acme-docs:finance/budget-2027.md
+  - question: How many new roles are planned for 2027?
+    document: acme-docs:finance/budget-2027.md
+  # Control: a public document everyone must still find.
+  - question: How many weeks of parental leave does Acme offer?
+    document: acme-docs:hr/parental-leave-policy.md

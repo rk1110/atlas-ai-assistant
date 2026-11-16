@@ -6,8 +6,9 @@ from datetime import datetime
 from fastapi import APIRouter, HTTPException, Response
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.deps import SessionDep, TracerDep
+from api.deps import CurrentUserDep, SessionDep, TracerDep
 from core.events import AgentLog, CitationEvent
 from models import Conversation, Message, MessageImage
 
@@ -45,10 +46,15 @@ class ImageRef(BaseModel):
 
 
 @router.get("")
-async def list_conversations(session: SessionDep, limit: int = 50) -> list[ConversationSummary]:
-    """Most recently active first: the sidebar order."""
+async def list_conversations(
+    session: SessionDep, user: CurrentUserDep, limit: int = 50
+) -> list[ConversationSummary]:
+    """The user's own conversations, most recently active first: the sidebar order."""
     rows = await session.scalars(
-        select(Conversation).order_by(Conversation.updated_at.desc()).limit(min(limit, 200))
+        select(Conversation)
+        .where(Conversation.user_id == user.id)
+        .order_by(Conversation.updated_at.desc())
+        .limit(min(limit, 200))
     )
     return [
         ConversationSummary(id=c.id, title=c.title, updated_at=c.updated_at) for c in rows.all()
@@ -57,10 +63,9 @@ async def list_conversations(session: SessionDep, limit: int = 50) -> list[Conve
 
 @router.get("/{conversation_id}/messages")
 async def list_messages(
-    conversation_id: uuid.UUID, session: SessionDep, tracer: TracerDep
+    conversation_id: uuid.UUID, session: SessionDep, tracer: TracerDep, user: CurrentUserDep
 ) -> list[MessageOut]:
-    if await session.get(Conversation, conversation_id) is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+    await _own_conversation(session, conversation_id, user.id)
     rows = list(
         await session.scalars(
             select(Message)
@@ -100,10 +105,21 @@ async def list_messages(
 
 
 @router.delete("/{conversation_id}", status_code=204)
-async def delete_conversation(conversation_id: uuid.UUID, session: SessionDep) -> Response:
-    conversation = await session.get(Conversation, conversation_id)
-    if conversation is None:
-        raise HTTPException(status_code=404, detail="Conversation not found")
+async def delete_conversation(
+    conversation_id: uuid.UUID, session: SessionDep, user: CurrentUserDep
+) -> Response:
+    conversation = await _own_conversation(session, conversation_id, user.id)
     await session.delete(conversation)  # messages go too (ON DELETE CASCADE)
     await session.commit()
     return Response(status_code=204)
+
+
+async def _own_conversation(
+    session: AsyncSession, conversation_id: uuid.UUID, user_id: uuid.UUID
+) -> Conversation:
+    """The conversation if it's this user's. Someone else's gets the same 404 as a missing
+    one, so ids can't be probed to learn which conversations exist (Phase 7)."""
+    conversation = await session.get(Conversation, conversation_id)
+    if conversation is None or conversation.user_id != user_id:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return conversation

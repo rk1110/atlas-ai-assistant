@@ -9,7 +9,7 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from sqlalchemy import text
@@ -17,6 +17,7 @@ from sqlalchemy import text
 from agents.checkpoints import postgres_checkpointer
 from api import (
     analytics,
+    auth,
     chat,
     classify,
     conversations,
@@ -29,7 +30,7 @@ from api import (
     outbox,
     voice,
 )
-from api.deps import SessionDep, get_settings
+from api.deps import SessionDep, get_current_user, get_settings
 from core.embeddings import get_embedder
 from core.tracing import get_tracer
 from integrations.mcp_tools import get_mcp_config, get_mcp_registry
@@ -73,21 +74,21 @@ app = FastAPI(title="Atlas API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().cors_origins,
+    # Phase 7: the browser sends the session cookie on cross-origin fetches (:3000 -> :8000)
+    # only if the API allows credentials, and then origins must be listed, never "*".
+    allow_credentials=True,
     allow_methods=["GET", "POST", "DELETE"],
     allow_headers=["Content-Type"],
 )
-app.include_router(analytics.router)
-app.include_router(chat.router)
-app.include_router(classify.router)
-app.include_router(conversations.router)
-app.include_router(graph.router)
-app.include_router(images.router)
-app.include_router(integrations.router)
-app.include_router(knowledge.router)
-app.include_router(memory.router)
-app.include_router(models.router)
-app.include_router(outbox.router)
-app.include_router(voice.router)
+app.include_router(auth.router)  # login itself must be reachable without a session
+# Everything else needs a logged-in user (Phase 7). One line here instead of a dependency on
+# every route, so a new route can't be added unprotected by forgetting it.
+LOGIN_REQUIRED = [Depends(get_current_user)]
+for module in (
+    analytics, chat, classify, conversations, graph, images, integrations, knowledge,
+    memory, models, outbox, voice,
+):  # fmt: skip
+    app.include_router(module.router, dependencies=LOGIN_REQUIRED)
 
 
 class HealthResponse(BaseModel):

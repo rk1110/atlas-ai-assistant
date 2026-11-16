@@ -182,9 +182,9 @@ footer { font-size: 0.8rem; color: var(--ink-2); border-top: 1px solid var(--rul
 <div class="wrap">
   <header class="head">
     <div class="fix">
-      <span>Position: <b>Phase 6 built: images, scans, charts and voice; quiz + exercises pending</b></span>
-      <span>Next: <b>Phase 7 plan (production-ready), waiting for your OK</b></span>
-      <span>Updated <b>2026-11-08</b></span>
+      <span>Position: <b>Phase 7: guardrails and login built; model evals deferred until credits</b></span>
+      <span>Next: <b>Phase 7 D: deploy-ready, then B (cache, routing)</b></span>
+      <span>Updated <b>2026-11-16</b></span>
     </div>
     <h1>Atlas Map</h1>
     <p class="lede">Press play to follow one chat message through the code, from the Enter key to the last token. Click any box to see what it does and which file it lives in.</p>
@@ -246,10 +246,10 @@ const NODES = {
   chips:    { layer: "Browser", name: "Citation chips", file: "frontend/components/chat/citation-chip.tsx + answer-markdown.tsx", status: "built",
               what: "Turns each [1] in an answer into a small clickable chip, plus a Sources row. Clicking shows the exact passage, its heading and a link to the page.",
               concept: "<strong>Verifiable answers.</strong> Users can check a claim against the source instead of trusting the model." },
-  kbpage:   { layer: "Browser", name: "Knowledge Base page", file: "frontend/app/knowledge/ + components/knowledge/", status: "built",
+  kbpage:   { layer: "Browser", name: "Knowledge Base page", file: "frontend/app/(main)/knowledge/ + components/knowledge/", status: "built",
               what: "Upload documents, test retrieval with any strategy, Compare five strategies side by side, and see every chunk on a t-SNE embedding map.",
               concept: "<strong>Background jobs.</strong> Ingestion takes seconds to minutes, so the page polls a status instead of waiting." },
-  graphui:  { layer: "Browser", name: "Graph + Analytics pages", file: "frontend/app/graph/ + app/analytics/", status: "built",
+  graphui:  { layer: "Browser", name: "Graph + Analytics pages", file: "frontend/app/(main)/graph/ + app/analytics/", status: "built",
               what: "Knowledge Graph explorer (React Flow): ask a question and the facts graph search would use light up. Analytics: eval scores over time and chat usage.",
               concept: "<strong>Show the work.</strong> A two-hop answer is easier to trust when you can see the path: Expense Policy ← owns ← Finance Team ← leads ← Elena Petrova." },
   eventsts: { layer: "Browser", name: "Event types", file: "frontend/lib/events.ts", status: "built",
@@ -403,6 +403,10 @@ const CHECKPOINTS = [
   { name: "Phase 6 · A", status: "built", items: ["Ask about a screenshot: attach, paste or drop", "Gemma 4 vision, describe-then-search, images saved"] },
   { name: "Phase 6 · B", status: "built", items: ["Scanned PDFs read by the vision model (OCR)", "Image and chart uploads to the knowledge base", "5 multimodal evals: hit rate 100%, correct 90%"] },
   { name: "Phase 6 · C", status: "built", items: ["Voice in: local Whisper speech-to-text (WER 3.8%)", "Voice out: answers read aloud"] },
+  { name: "Phase 7 · A", status: "built", items: ["Poisoned doc quarantined at ingestion, prompt v6, output check", "PII masked before anything sees it (9/10 caught)"] },
+  { name: "Phase 7 · B", status: "later", items: ["Semantic cache (pgvector)", "Cheap vs strong model routing, cost charts"] },
+  { name: "Phase 7 · C", status: "built", items: ["Demo login (backend session cookie), per-user chats and memory", "Permission-aware retrieval: 0 leaks; rate limits"] },
+  { name: "Phase 7 · D", status: "next", items: ["Production images, CI with evals", "Deploy-ready configs (no public deploy)"] },
 ];
 
 const PHASES = [
@@ -411,8 +415,8 @@ const PHASES = [
   { no: 3, name: "Advanced RAG + evals", what: "Hybrid search, reranker, query rewriting, GraphRAG, evals in CI." },
   { no: 4, name: "Agents + tools", what: "LangGraph agent, tools, approval cards, memory." },
   { no: 5, name: "Multi-agent + MCP", what: "Planner, Researcher, Action and Verifier; Jira and Slack via MCP.", demo: "Demo 2" },
-  { no: 6, name: "Multimodal + voice", what: "Questions about images and scanned PDFs; speak and listen.", now: true },
-  { no: 7, name: "Production-ready", what: "Guardrails, caching, model routing, login, cost dashboard, deploy." },
+  { no: 6, name: "Multimodal + voice", what: "Questions about images and scanned PDFs; speak and listen." },
+  { no: 7, name: "Production-ready", what: "Guardrails, caching, model routing, login, cost dashboard, deploy-ready.", now: true },
   { no: 8, name: "Fine-tune + launch", what: "Local Ollama, a small LoRA fine-tune, demo video, README.", demo: "Final demo" },
 ];
 

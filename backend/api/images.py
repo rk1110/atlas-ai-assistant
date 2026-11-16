@@ -7,16 +7,23 @@ of base64, and the browser can cache each image.
 import uuid
 
 from fastapi import APIRouter, HTTPException, Response
+from sqlalchemy import select
 
-from api.deps import SessionDep
-from models import MessageImage
+from api.deps import CurrentUserDep, SessionDep
+from models import Conversation, Message, MessageImage
 
 router = APIRouter(prefix="/api/images", tags=["images"])
 
 
 @router.get("/{image_id}")
-async def get_image(image_id: uuid.UUID, session: SessionDep) -> Response:
-    image = await session.get(MessageImage, image_id)
+async def get_image(image_id: uuid.UUID, session: SessionDep, user: CurrentUserDep) -> Response:
+    # Only the owner of the conversation the image was attached in may see it (Phase 7).
+    image = await session.scalar(
+        select(MessageImage)
+        .join(Message, MessageImage.message_id == Message.id)
+        .join(Conversation, Message.conversation_id == Conversation.id)
+        .where(MessageImage.id == image_id, Conversation.user_id == user.id)
+    )
     if image is None:
         raise HTTPException(status_code=404, detail="Image not found")
     return Response(

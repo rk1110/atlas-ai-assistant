@@ -5,6 +5,7 @@
         2. parse     any format -> clean text with Markdown headings (scans and images: a vision
                  model reads them, Phase 6)
         3. chunk     text -> passages of ~350 tokens, each with its heading path
+       scan      each passage for prompt injection; suspicious ones are quarantined (Phase 7)
         4. embed     every passage -> a 384-number vector (batched, on CPU)
         5. store     replace the document's old chunks with the new ones, in ONE transaction,
                      so a search never sees a half-updated document
@@ -27,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from core.embeddings import Embedder
 from core.interfaces.data_source import DataSource, Document
 from core.rag_config import ChunkingConfig
+from guardrails.injection import PROVISIONAL, InjectionScanner
 from ingestion.chunkers import ChunkDraft, MarkdownChunker
 from ingestion.parsers import parse_document
 from ingestion.vision import VisionReader
@@ -42,6 +44,7 @@ class DocumentResult:
     document_id: str
     outcome: Outcome
     chunks: int = 0
+    quarantined: int = 0  # chunks the injection scan held back (Phase 7)
     seconds: float = 0.0
     error: str | None = None
 
@@ -63,9 +66,11 @@ class IngestionPipeline:
         chunking: ChunkingConfig,
         session_factory: async_sessionmaker[AsyncSession],
         vision: VisionReader | None = None,
+        scanner: InjectionScanner | None = None,
     ):
         self._embedder = embedder
         self._vision = vision
+        self._scanner = scanner
         self._chunker = MarkdownChunker(chunking, embedder.count_tokens)
         self._session_factory = session_factory
 
@@ -97,10 +102,11 @@ class IngestionPipeline:
         try:
             parsed = await parse_document(document, self._vision)
             drafts = self._chunker.chunk(parsed.text)
+            quarantine = await self._scan(document.id, drafts)
             vectors = await self._embedder.embed_documents(
                 [embedding_text(parsed.title, d) for d in drafts]
             )
-            await self._replace_chunks(document.id, parsed.title, drafts, vectors)
+            await self._replace_chunks(document.id, parsed.title, drafts, vectors, quarantine)
         except Exception as exc:  # any failure (logged with traceback): record it, keep going
             logger.exception("ingestion failed for %s", document.id)
             await self._mark_failed(document.id, str(exc))
@@ -108,8 +114,17 @@ class IngestionPipeline:
                 document.id, "failed", seconds=time.perf_counter() - started, error=str(exc)
             )
         return DocumentResult(
-            document.id, "ingested", chunks=len(drafts), seconds=time.perf_counter() - started
+            document.id,
+            "ingested",
+            chunks=len(drafts),
+            quarantined=sum(1 for q in quarantine if q),
+            seconds=time.perf_counter() - started,
         )
+
+    async def _scan(self, document_id: str, drafts: list[ChunkDraft]) -> list[str | None]:
+        if self._scanner is None:
+            return [None] * len(drafts)
+        return await self._scanner.scan([d.text for d in drafts], document_id=document_id)
 
     async def mark_pending(self, document: Document) -> None:
         """Show a document as "pending" before a background task ingests it, so the Knowledge
@@ -122,11 +137,19 @@ class IngestionPipeline:
     async def _is_unchanged(self, document_id: str, content_hash: str) -> bool:
         async with self._session_factory() as session:
             record = await session.get(DocumentRecord, document_id)
-            return (
-                record is not None
-                and record.status == "ready"
-                and (record.content_hash == content_hash)
+            if record is None or record.status != "ready" or record.content_hash != content_hash:
+                return False
+            # Phase 7: chunks quarantined by heuristics alone (the classifier was down) get a
+            # proper scan on the next run, instead of staying hidden until someone --forces.
+            provisional = await session.scalar(
+                select(ChunkRecord.id)
+                .where(
+                    ChunkRecord.document_id == document_id,
+                    ChunkRecord.quarantine_reason.contains(PROVISIONAL),
+                )
+                .limit(1)
             )
+            return provisional is None
 
     async def _upsert_record(self, document: Document, content_hash: str, status: str) -> None:
         async with self._session_factory() as session:
@@ -151,6 +174,7 @@ class IngestionPipeline:
         title: str,
         drafts: list[ChunkDraft],
         vectors: list[list[float]],
+        quarantine: list[str | None],
     ) -> None:
         async with self._session_factory() as session, session.begin():
             await session.execute(delete(ChunkRecord).where(ChunkRecord.document_id == document_id))
@@ -163,8 +187,11 @@ class IngestionPipeline:
                     token_count=draft.token_count,
                     embedding=vector,
                     search_vector=search_vector(title, draft.heading, draft.text),
+                    quarantine_reason=reason,
                 )
-                for i, (draft, vector) in enumerate(zip(drafts, vectors, strict=True))
+                for i, (draft, vector, reason) in enumerate(
+                    zip(drafts, vectors, quarantine, strict=True)
+                )
             )
             record = await session.get(DocumentRecord, document_id)
             assert record is not None

@@ -81,10 +81,12 @@ docker compose exec backend python -m evals.run --retriever vector --no-rewrite 
 docker compose exec backend python -m evals.run --no-judge  # skip the LLM-as-judge scores
 docker compose exec backend python -m evals.run --tag multimodal   # scanned PDF + chart questions (Phase 6)
 docker compose exec backend python -m evals.voice_run   # speech-to-text word error rate (--model small, --no-prompt)
+docker compose exec backend python -m evals.guardrails_run   # injection, quarantine, attacks, PII, permissions (--part permissions)
 docker compose exec -e HF_HUB_OFFLINE=0 backend python -m evals.voice_run   # first time: also downloads Whisper
 docker compose exec backend python -m evals.agent_run       # agent evals: routing, actions, approval gate
 docker compose exec backend python -m evals.agent_run --mode single   # compare with the Phase 4 single agent
 docker compose exec backend python -m scripts.smoke_llm     # one streamed reply per model
+docker compose exec backend python -m scripts.seed_users     # create/update demo logins (config/auth.yaml; password DEMO_PASSWORD in .env)
 docker compose exec backend python -m ingestion.run          # load data/ into the knowledge base (skips unchanged)
 docker compose exec backend python -m ingestion.run --force  # re-embed all (after changing config/rag.yaml)
 docker compose exec backend python -m graph.build            # extract Acme docs into Neo4j (skips unchanged; --force)
@@ -100,7 +102,7 @@ cd frontend && npm run dev                                  # frontend outside D
 
 | URL | What |
 | --- | --- |
-| http://localhost:3000 | Atlas web app (/knowledge, /graph, /analytics, /outbox) |
+| http://localhost:3000 | Atlas web app (/login, /knowledge, /graph, /analytics, /outbox); demo users in config/auth.yaml |
 | http://localhost:8000/docs | Backend API docs |
 | http://localhost:3001 | Langfuse (traces; login from `.env`) |
 | http://localhost:7474 | Neo4j browser (user `neo4j`, password `NEO4J_PASSWORD` from `.env`) |
@@ -116,7 +118,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Built (2026-10-31; agent evals: routing 100%, actions 88%, unapproved writes 0); walkthrough + demo script written; quiz + exercises pending |
 | 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Built (2026-10-31; team 88% = single 88% at 2.5x calls; Jira/Slack via MCP; Atlas MCP server over stdio); Claude Desktop check, quiz + exercises pending |
 | 6 | Multimodal + voice | Built (2026-11-08; image questions via Gemma 4, scanned PDFs + charts in the KB: multimodal evals hit 100% / correct 90%; voice: local Whisper base, WER 3.8%, browser read-aloud); walkthrough written; quiz + exercises pending |
-| 7 | Production-ready (guardrails, caching, routing, auth, cost dashboard, deploy) | Not started |
+| 7 | Production-ready (guardrails, caching, routing, auth, cost dashboard, deploy) | In progress: A built (injection quarantine, prompt v6, output check, PII masking); C built (demo login via backend cookie, per-user chats/memory, permission-aware retrieval: 0 leaks, rate limits); B (cache, routing) and D (deploy-ready, no public deploy) next. Model-dependent evals deferred until credits are added (see decisions.md) |
 | 8 | Fine-tune + launch (Ollama, LoRA, demo video, README) | Not started |
 
 A phase is "Done" only when its "Done when" criteria in `docs/PLAN.md` are met, the walkthrough doc exists, and I've completed the quiz and my exercises.

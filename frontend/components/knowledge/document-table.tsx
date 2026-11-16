@@ -4,6 +4,7 @@ import { Trash2 } from "lucide-react";
 import { useState } from "react";
 
 import { DocumentStatusBadge } from "@/components/knowledge/document-status-badge";
+import { QuarantineBadge } from "@/components/knowledge/quarantine-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { KnowledgeDocument } from "@/lib/api";
@@ -53,6 +54,7 @@ export function DocumentTable({ documents, uploadSource, onOpen, onDelete }: Pro
                   {doc.error ?? doc.id}
                 </span>
               </span>
+              <QuarantineBadge count={doc.quarantined_chunks} />
               <span className="hidden shrink-0 text-xs tabular-nums text-muted-foreground sm:block">{doc.chunk_count} chunks</span>
               <DocumentStatusBadge status={doc.status} />
             </button>

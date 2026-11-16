@@ -9,6 +9,7 @@ COPY --from=ghcr.io/astral-sh/uv:0.13.1 /uv /uvx /bin/
 ENV UV_PROJECT_ENVIRONMENT=/opt/venv \
     UV_COMPILE_BYTECODE=1 \
     UV_LINK_MODE=copy \
+    UV_HTTP_TIMEOUT=300 \
     PATH="/opt/venv/bin:$PATH" \
     PYTHONUNBUFFERED=1
 

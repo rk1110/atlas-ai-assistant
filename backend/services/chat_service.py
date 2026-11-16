@@ -59,6 +59,7 @@ from core.model_catalog import ModelCatalog
 from core.multimodal_config import MultimodalConfig
 from core.prompts import PromptRegistry, RenderedPrompt
 from core.tracing import Span, Tracer
+from guardrails.output import unsupported_destinations
 from models import Conversation, Message, MessageImage
 from services.grounding import citations_for, format_sources
 from services.intent import IntentClassifier
@@ -138,6 +139,7 @@ class ChatService:
         *,
         catalog: ModelCatalog | None = None,
         multimodal: MultimodalConfig | None = None,
+        check_output: bool = False,
     ):
         self._gateway = gateway
         self._retriever = retriever
@@ -154,6 +156,7 @@ class ChatService:
         # Phase 6: the catalog says which models can read images; None = no image support.
         self._catalog = catalog
         self._multimodal = multimodal or MultimodalConfig()
+        self._check_output = check_output  # Phase 7: flag unsupported links in answers
         self._background: set[asyncio.Task[object]] = set()  # keeps memory tasks alive
         self._prompts = prompts
         self._settings = settings
@@ -171,7 +174,11 @@ class ChatService:
         return [decode_image(i.data, max_mb=limits.max_mb) for i in request.images]
 
     async def stream_reply(
-        self, request: ChatRequest, model_id: str, images: list[DecodedImage] | None = None
+        self,
+        request: ChatRequest,
+        model_id: str,
+        images: list[DecodedImage] | None = None,
+        user_id: uuid.UUID | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Public entry point. Guarantees the stream ends with `done`, whatever happens inside.
 
@@ -183,11 +190,12 @@ class ChatService:
             input=request.message,
             session_id=str(request.conversation_id),
             metadata={"model_id": model_id},
+            user_id=str(user_id) if user_id else None,
         )
         try:
             # aclosing: if this stream is closed early, close the inner one too, right away
             # (otherwise it would only be cleaned up whenever the garbage collector gets to it).
-            turn = self._stream_reply(request, model_id, trace, images or [])
+            turn = self._stream_reply(request, model_id, trace, images or [], user_id)
             async with aclosing(turn) as events:
                 async for event in events:
                     yield event
@@ -204,13 +212,18 @@ class ChatService:
             )
 
     async def _stream_reply(
-        self, request: ChatRequest, model_id: str, trace: Span, images: list[DecodedImage]
+        self,
+        request: ChatRequest,
+        model_id: str,
+        trace: Span,
+        images: list[DecodedImage],
+        user_id: uuid.UUID | None,
     ) -> AsyncIterator[StreamEvent]:
         # A session opened HERE, inside the stream, not taken from the request: the response
         # keeps streaming after the route function returns, when request-scoped resources
         # may already be closed.
         async with self._session_factory() as session:
-            conversation = await self._get_or_create_conversation(session, request)
+            conversation = await self._get_or_create_conversation(session, request, user_id)
             if await self._is_retry_of_last_question(session, request):
                 saved = await self._last_question_images(session, request.conversation_id)
                 image_ids = [i for i, _ in saved]
@@ -238,9 +251,9 @@ class ChatService:
             conversation.updated_at = func.now()
             await session.commit()
         history, summary = await self._history_and_summary(request.conversation_id, trace)
-        self._remember_later(request.message, request.conversation_id)
+        self._remember_later(request.message, request.conversation_id, user_id)
         log = AgentLog()  # what this turn did, saved with an agent answer
-        facts = await self._recall(request.message)
+        facts = await self._recall(request.message, user_id)
         if facts:
             remembered = AgentStepEvent(
                 step_id="memory",
@@ -366,6 +379,8 @@ class ChatService:
 
         for citation in citations:
             yield citation
+        if warning := self._output_warning(answer, sources, request.message):
+            yield warning
         if error:
             yield error
         yield DoneEvent(
@@ -374,6 +389,28 @@ class ChatService:
             prompt_ref=prompt.ref,
             trace_id=trace.trace_id,
             trace_url=self._trace_url(trace),
+        )
+
+    def _output_warning(
+        self, answer: str, sources: list[Chunk], question: str
+    ) -> AgentStepEvent | None:
+        """Guardrail layer 3 (Phase 7): a link or email address in the answer that no source
+        and not the question contains is the classic payload of a prompt injection."""
+        if not self._check_output or not answer:
+            return None
+        unsupported = unsupported_destinations(answer, [question, *(c.text for c in sources)])
+        if not unsupported:
+            return None
+        logger.warning("answer contains destinations found in no source: %s", unsupported)
+        return AgentStepEvent(
+            step_id="output_check",
+            agent="guardrails",
+            status="failed",
+            title="Unverified address in this answer",
+            detail=(
+                f"{', '.join(unsupported)} isn't in any source. Don't use it, and never send "
+                "a password anywhere: IT will never ask for it."
+            ),
         )
 
     # ------------------------------------------------------------------ agent (Phase 4)
@@ -411,7 +448,7 @@ class ChatService:
         return True
 
     async def resume_approval(
-        self, decision: ApprovalDecision, model_id: str
+        self, decision: ApprovalDecision, model_id: str, user_id: uuid.UUID | None = None
     ) -> AsyncIterator[StreamEvent]:
         """Continue a paused agent run with the human's decision. Same stream contract as
         stream_reply: events, then always `done`."""
@@ -420,6 +457,7 @@ class ChatService:
             input={"approval_id": decision.approval_id, "decision": decision.decision},
             session_id=str(decision.conversation_id),
             metadata={"model_id": model_id},
+            user_id=str(user_id) if user_id else None,
         )
         run = self._agent.resume(  # type: ignore[union-attr]  # route checked check_approval
             conversation_id=str(decision.conversation_id),
@@ -526,14 +564,24 @@ class ChatService:
     def _trace_url(self, trace: Span) -> str | None:
         return self._tracer.trace_url(trace.trace_id)
 
+    async def owns_conversation(self, conversation_id: uuid.UUID, user_id: uuid.UUID) -> bool:
+        """True if the conversation is the user's, or doesn't exist yet (a new chat's id).
+        Routes check this before streaming: someone else's id gets a 404 (Phase 7)."""
+        async with self._session_factory() as session:
+            owner = await session.scalar(
+                select(Conversation.user_id).where(Conversation.id == conversation_id)
+            )
+            exists = owner is not None or await session.get(Conversation, conversation_id)
+            return not exists or owner == user_id
+
     async def _get_or_create_conversation(
-        self, session: AsyncSession, request: ChatRequest
+        self, session: AsyncSession, request: ChatRequest, user_id: uuid.UUID | None
     ) -> Conversation:
         conversation = await session.get(Conversation, request.conversation_id)
         if conversation is None:
             first_line = request.message.strip().splitlines()[0]
             conversation = Conversation(
-                id=request.conversation_id, title=first_line[:TITLE_MAX_CHARS]
+                id=request.conversation_id, title=first_line[:TITLE_MAX_CHARS], user_id=user_id
             )
             session.add(conversation)
         return conversation
@@ -684,27 +732,31 @@ class ChatService:
             unsummarized = older[conversation.summarized_count :]
             return [*unsummarized, *recent], conversation.summary
 
-    async def _recall(self, question: str) -> list:
+    async def _recall(self, question: str, user_id: uuid.UUID | None) -> list:
         """Long-term memory: stored facts about the user most related to this question."""
         if self._memory is None or not self._memory_config.long_term.enabled:
             return []
         try:
-            return await self._memory.recall(question)
+            return await self._memory.recall(question, user_id)
         except Exception:  # memory must never break a chat turn
             logger.warning("memory recall failed", exc_info=True)
             return []
 
-    def _remember_later(self, message: str, conversation_id: uuid.UUID) -> None:
+    def _remember_later(
+        self, message: str, conversation_id: uuid.UUID, user_id: uuid.UUID | None
+    ) -> None:
         """Extract facts from the user's message in the background: the answer doesn't wait."""
         if self._memory is None or not self._memory_config.long_term.enabled:
             return
-        task = asyncio.create_task(self._remember(message, conversation_id))
+        task = asyncio.create_task(self._remember(message, conversation_id, user_id))
         self._background.add(task)
         task.add_done_callback(self._background.discard)
 
-    async def _remember(self, message: str, conversation_id: uuid.UUID) -> None:
+    async def _remember(
+        self, message: str, conversation_id: uuid.UUID, user_id: uuid.UUID | None
+    ) -> None:
         try:
-            await self._memory.remember(message, conversation_id)  # type: ignore[union-attr]
+            await self._memory.remember(message, conversation_id, user_id)  # type: ignore[union-attr]
         except Exception:
             logger.warning("remembering failed", exc_info=True)
 

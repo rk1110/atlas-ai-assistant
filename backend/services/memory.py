@@ -16,7 +16,7 @@ import logging
 import uuid
 
 from pydantic import BaseModel, Field
-from sqlalchemy import delete, select
+from sqlalchemy import ColumnElement, delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from core.embeddings import Embedder
@@ -61,20 +61,25 @@ class LongTermMemory:
         self._model_id = model_id
         self._config = config
 
-    async def recall(self, query: str) -> list[MemoryItem]:
-        """The stored facts most similar to the question (all of them, while there are few)."""
+    async def recall(self, query: str, user_id: uuid.UUID | None = None) -> list[MemoryItem]:
+        """The user's stored facts most similar to the question (all, while there are few)."""
         vector = await self._embedder.embed_query(query)
         distance = MemoryRecord.embedding.cosine_distance(vector)
         async with self._session_factory() as session:
             rows = await session.execute(
-                select(MemoryRecord, distance).order_by(distance).limit(self._config.recall_top_k)
+                select(MemoryRecord, distance)
+                .where(_owned_by(user_id))
+                .order_by(distance)
+                .limit(self._config.recall_top_k)
             )
             return [
                 MemoryItem(id=m.id, content=m.content, score=round(1 - float(d), 4))
                 for m, d in rows.all()
             ]
 
-    async def remember(self, message: str, conversation_id: uuid.UUID) -> list[str]:
+    async def remember(
+        self, message: str, conversation_id: uuid.UUID, user_id: uuid.UUID | None = None
+    ) -> list[str]:
         """Extract facts from a user message and store the new ones. Runs after the answer
         (in the background), so it never slows a reply down. Returns what was stored."""
         prompt = self._prompts.render("memory_extract", message=message)
@@ -96,11 +101,14 @@ class LongTermMemory:
         stored = []
         async with self._session_factory() as session:
             for fact, vector in zip(facts, vectors, strict=True):
-                if await self._has_near_duplicate(session, vector):
+                if await self._has_near_duplicate(session, vector, user_id):
                     continue
                 session.add(
                     MemoryRecord(
-                        content=fact, embedding=vector, source_conversation_id=conversation_id
+                        content=fact,
+                        embedding=vector,
+                        source_conversation_id=conversation_id,
+                        user_id=user_id,
                     )
                 )
                 stored.append(fact)
@@ -109,23 +117,38 @@ class LongTermMemory:
             logger.info("remembered %d new fact(s)", len(stored))
         return stored
 
-    async def all(self) -> list[MemoryItem]:
+    async def all(self, user_id: uuid.UUID | None = None) -> list[MemoryItem]:
         async with self._session_factory() as session:
             rows = await session.scalars(
-                select(MemoryRecord).order_by(MemoryRecord.created_at.desc())
+                select(MemoryRecord)
+                .where(_owned_by(user_id))
+                .order_by(MemoryRecord.created_at.desc())
             )
             return [MemoryItem(id=m.id, content=m.content) for m in rows.all()]
 
-    async def forget(self, memory_id: uuid.UUID) -> bool:
+    async def forget(self, memory_id: uuid.UUID, user_id: uuid.UUID | None = None) -> bool:
         async with self._session_factory() as session:
-            result = await session.execute(delete(MemoryRecord).where(MemoryRecord.id == memory_id))
+            result = await session.execute(
+                delete(MemoryRecord).where(MemoryRecord.id == memory_id, _owned_by(user_id))
+            )
             await session.commit()
             return bool(result.rowcount)  # type: ignore[attr-defined]
 
-    async def _has_near_duplicate(self, session: AsyncSession, vector: list[float]) -> bool:
+    async def _has_near_duplicate(
+        self, session: AsyncSession, vector: list[float], user_id: uuid.UUID | None
+    ) -> bool:
         distance = MemoryRecord.embedding.cosine_distance(vector)
-        closest = await session.scalar(select(distance).order_by(distance).limit(1))
+        closest = await session.scalar(
+            select(distance).where(_owned_by(user_id)).order_by(distance).limit(1)
+        )
         return closest is not None and 1 - float(closest) >= self._config.duplicate_similarity
+
+
+def _owned_by(user_id: uuid.UUID | None) -> ColumnElement[bool]:
+    """Phase 7: each user sees only their own facts. None = no login (tests, scripts)."""
+    if user_id is None:
+        return MemoryRecord.user_id.is_(None)
+    return MemoryRecord.user_id == user_id
 
 
 class ConversationSummarizer:

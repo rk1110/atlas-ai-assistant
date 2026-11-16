@@ -15,6 +15,7 @@ ids, error codes) match poorly. Phase 3's keyword + hybrid search fixes that.
 from sqlalchemy import Select, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
+from core.access import reader_tags
 from core.embeddings import Embedder
 from core.interfaces.retriever import Chunk, RetrievalFilters, Retriever
 from models import ChunkRecord, DocumentRecord
@@ -55,7 +56,15 @@ def apply_filters(statement: Select, filters: RetrievalFilters | None) -> Select
     Caveat worth knowing: with an HNSW index, Postgres walks the graph first and filters
     after, so a very selective filter can return fewer than top_k rows. pgvector's
     `hnsw.iterative_scan` setting addresses that if it ever bites.
+
+    Always applied, even without filters (Phase 7): chunks quarantined by the injection scan,
+    and documents the current reader may not see (core/access.py). The reader's tags can only
+    narrow a search; `filters.access_tags` narrows it further, never widens it.
     """
+    if filters is None or not filters.include_quarantined:
+        statement = statement.where(ChunkRecord.quarantine_reason.is_(None))
+    if (tags := reader_tags()) is not None:
+        statement = statement.where(DocumentRecord.access_tags.overlap(tags))
     if filters is None:
         return statement
     if filters.sources:

@@ -44,6 +44,7 @@ class MarkdownDirectorySource(DataSource):
                 content_type="markdown",
                 url=self.url_for(relative),
                 metadata={k: v for k, v in meta.items() if isinstance(v, str | int | float)},
+                access_tags=_access_tags(meta),
             )
         binaries = (p for p in self.root.rglob("*") if p.suffix.lower() in self.binary_types)
         for path in sorted(binaries):
@@ -92,6 +93,15 @@ class AcmeDocsSource(MarkdownDirectorySource):
         ".jpg": "image",
         ".jpeg": "image",
     }
+
+
+def _access_tags(meta: dict) -> list[str]:
+    """Front matter `access: [hr]` restricts a document to readers with that tag (Phase 7).
+    No `access` = public, like everything before Phase 7."""
+    access = meta.get("access")
+    if isinstance(access, str):
+        access = [access]
+    return [str(a) for a in access] if access else ["public"]
 
 
 def _title_from_path(relative: Path) -> str:

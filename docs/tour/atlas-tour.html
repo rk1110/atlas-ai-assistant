@@ -690,31 +690,31 @@ mark.x { background: var(--bad-soft); color: var(--bad); border-radius: 3px; pad
 <script type="application/json" id="tour-refs">[
   {"file": "frontend/lib/use-chat-stream.ts", "line": 87, "text": "const streamInto = useCallback"},
   {"file": "frontend/lib/use-chat-stream.ts", "line": 95, "text": "const handle = (event"},
-  {"file": "frontend/lib/use-chat-stream.ts", "line": 246, "text": "async function readEvents"},
-  {"file": "backend/api/chat.py", "line": 27, "text": "async def chat("},
-  {"file": "backend/services/chat_service.py", "line": 173, "text": "async def stream_reply("},
-  {"file": "backend/services/chat_service.py", "line": 313, "text": "sources = await self._retrieve("},
-  {"file": "backend/services/chat_service.py", "line": 371, "text": "yield DoneEvent("},
+  {"file": "frontend/lib/use-chat-stream.ts", "line": 251, "text": "async function readEvents"},
+  {"file": "backend/api/chat.py", "line": 32, "text": "async def chat("},
+  {"file": "backend/services/chat_service.py", "line": 176, "text": "async def stream_reply("},
+  {"file": "backend/services/chat_service.py", "line": 326, "text": "sources = await self._retrieve("},
+  {"file": "backend/services/chat_service.py", "line": 386, "text": "yield DoneEvent("},
   {"file": "backend/core/llm.py", "line": 147, "text": "async def stream_chat("},
   {"file": "backend/core/events.py", "line": 25, "text": "class TokenEvent("},
   {"file": "backend/core/events.py", "line": 192, "text": "def to_sse("},
   {"file": "docker-compose.yml", "line": 191, "text": "  backend:"},
-  {"file": "docker-compose.yml", "line": 229, "text": "alembic upgrade head && exec uvicorn"},
-  {"file": "backend/Dockerfile", "line": 22, "text": "uv sync --frozen"},
+  {"file": "docker-compose.yml", "line": 232, "text": "alembic upgrade head && exec uvicorn"},
+  {"file": "backend/Dockerfile", "line": 23, "text": "uv sync --frozen"},
   {"file": "infra/postgres/init.sql", "line": 9, "text": "CREATE DATABASE langfuse"},
   {"file": "backend/core/config.py", "line": 21, "text": "class Settings(BaseSettings)"},
-  {"file": "backend/core/config.py", "line": 81, "text": "def get_settings()"},
-  {"file": "backend/main.py", "line": 44, "text": "async def lifespan("},
-  {"file": "backend/main.py", "line": 69, "text": "app = FastAPI("},
-  {"file": "backend/main.py", "line": 97, "text": "@app.get(\"/health\")"},
-  {"file": "backend/api/deps.py", "line": 56, "text": "def get_gateway()"},
-  {"file": "backend/ingestion/pipeline.py", "line": 90, "text": "async def ingest_document("},
-  {"file": "backend/ingestion/pipeline.py", "line": 196, "text": "def embedding_text("},
+  {"file": "backend/core/config.py", "line": 86, "text": "def get_settings()"},
+  {"file": "backend/main.py", "line": 45, "text": "async def lifespan("},
+  {"file": "backend/main.py", "line": 70, "text": "app = FastAPI("},
+  {"file": "backend/main.py", "line": 98, "text": "@app.get(\"/health\")"},
+  {"file": "backend/api/deps.py", "line": 65, "text": "def get_gateway()"},
+  {"file": "backend/ingestion/pipeline.py", "line": 95, "text": "async def ingest_document("},
+  {"file": "backend/ingestion/pipeline.py", "line": 223, "text": "def embedding_text("},
   {"file": "backend/ingestion/chunkers/markdown.py", "line": 73, "text": "def _chunk_section("},
   {"file": "backend/ingestion/chunkers/markdown.py", "line": 153, "text": "def _merge_small("},
   {"file": "backend/core/embeddings.py", "line": 84, "text": "async def embed_query("},
   {"file": "backend/core/embeddings.py", "line": 94, "text": "def _encode("},
-  {"file": "backend/retrieval/vector.py", "line": 30, "text": "async def retrieve("},
+  {"file": "backend/retrieval/vector.py", "line": 31, "text": "async def retrieve("},
   {"file": "backend/migrations/versions/0003_documents_and_chunks.py", "line": 67, "text": "Vector(384)"},
   {"file": "backend/migrations/versions/0003_documents_and_chunks.py", "line": 84, "text": "\"ix_chunks_embedding_hnsw\","},
   {"file": "config/rag.yaml", "line": 20, "text": "chunk_size: 350"},
@@ -737,7 +737,7 @@ mark.x { background: var(--bad-soft); color: var(--bad); border-radius: 3px; pad
   {"file": "backend/services/grounding.py", "line": 26, "text": "def format_sources("},
   {"file": "backend/services/grounding.py", "line": 47, "text": "def cited_numbers("},
   {"file": "backend/services/grounding.py", "line": 59, "text": "def citations_for("},
-  {"file": "backend/services/chat_service.py", "line": 353, "text": "citations = citations_for(answer, sources)"},
+  {"file": "backend/services/chat_service.py", "line": 366, "text": "citations = citations_for(answer, sources)"},
   {"file": "frontend/components/chat/citation-chip.tsx", "line": 14, "text": "export function CitationChip("},
   {"file": "frontend/components/chat/answer-markdown.tsx", "line": 11, "text": "const MARKER ="},
   {"file": "backend/evals/metrics.py", "line": 18, "text": "def reciprocal_rank("},
@@ -753,7 +753,7 @@ mark.x { background: var(--bad-soft); color: var(--bad); border-radius: 3px; pad
   {"file": "backend/agents/nodes.py", "line": 34, "text": "def make_tools_node("},
   {"file": "backend/agents/nodes.py", "line": 78, "text": "def approval_node("},
   {"file": "backend/agents/nodes.py", "line": 96, "text": "def make_act_node("},
-  {"file": "backend/services/memory.py", "line": 77, "text": "async def remember("},
+  {"file": "backend/services/memory.py", "line": 80, "text": "async def remember("},
   {"file": "config/agent.yaml", "line": 15, "text": "max_model_calls: 6"},
   {"file": "config/memory.yaml", "line": 6, "text": "keep_last_messages: 10"},
   {"file": "backend/agents/team.py", "line": 196, "text": "graph.add_node(\"planner\", planner_node)"},
@@ -2189,7 +2189,7 @@ switch (event.type) {
 
     { k: "Deep dive 2 of 6 · API route", track: "D", render: () => `
       <h2>The route: thin on purpose</h2>
-      ${annotated("code-route", "backend/api/chat.py", "chat(), line 27", "Why check the model here, before streaming, instead of letting the service find out?", [
+      ${annotated("code-route", "backend/api/chat.py", "chat(), line 32", "Why check the model here, before streaming, instead of letting the service find out?", [
         [3, 5, "Check everything possible **before** streaming. The HTTP status is sent once, at the start; after “200 OK” it can't become a 400. Later problems must travel as `error` events."],
         [7, 9, "A generator: for each event the service produces, turn it into SSE text and pass it on. No AI logic here at all."],
         [11, 11, "`StreamingResponse` keeps the connection open and sends each `yield` as soon as it happens. `text/event-stream` tells the browser this is SSE."],
@@ -2197,7 +2197,7 @@ switch (event.type) {
 
     { k: "Deep dive 3 of 6 · Chat service", track: "D", render: () => `
       <h2>The conductor: the answer path in 15 lines</h2>
-      ${annotated("code-service", "backend/services/chat_service.py", "stream_reply() line 173, _stream_reply() lines 313–371", "Citations are sent at the very end, after all the text. Why not with the first words?", [
+      ${annotated("code-service", "backend/services/chat_service.py", "stream_reply() line 176, _stream_reply() lines 326–386", "Citations are sent at the very end, after all the text. Why not with the first words?", [
         [1, 2, "One Langfuse **trace** per chat turn. Its session id is the conversation id, so Langfuse can replay a whole chat."],
         [3, 9, "The safety net. Whatever breaks inside, the user gets a safe message (never internals) and **every stream ends with `done`**. The browser relies on that to stop the spinner."],
         [12, 12, "**Retrieve**: find the 5 best passages. Chapters 3–5 open this line."],
@@ -2228,7 +2228,7 @@ switch (event.type) {
 
     { k: "Deep dive 6 of 6 · Browser again", track: "D", render: () => `
       <h2>Reading the stream, closing the loop</h2>
-      ${annotated("code-read", "frontend/lib/use-chat-stream.ts", "readEvents() line 246, handle() line 95", "Bytes can arrive cut in the middle of an event. How does this code avoid reading half an event?", [
+      ${annotated("code-read", "frontend/lib/use-chat-stream.ts", "readEvents() line 251, handle() line 95", "Bytes can arrive cut in the middle of an event. How does this code avoid reading half an event?", [
         [1, 5, "Read the body bit by bit, whenever bytes arrive, until the server closes it."],
         [6, 6, "Add new bytes to a **buffer**. `stream: true` keeps a character split across two chunks (like “é”) intact."],
         [7, 13, "Only text up to a blank line (`\\n\\n`) is a complete event. Cut it off, parse its JSON, hand it on. A half event waits in the buffer for the rest."],
@@ -2594,7 +2594,7 @@ redis            Up 42 hours <span class="ok">(healthy)</span>   127.0.0.1:6379-
 
     { k: "Deep dive 2 of 5 · Dockerfile", track: "D", render: () => `
       <h2>How the backend image is built</h2>
-      ${annotated("code-dockerfile", "backend/Dockerfile", "uv sync on line 22", "Why copy the dependency files before the rest of the code?", [
+      ${annotated("code-dockerfile", "backend/Dockerfile", "uv sync on line 23", "Why copy the dependency files before the rest of the code?", [
         [1, 1, "An exact base image version, like every dependency in Atlas."],
         [2, 2, "**uv**, a fast Python package manager, copied in as one file."],
         [3, 5, "The virtual environment lives outside `/app/backend`, so the bind mount of your code doesn't hide it. Unbuffered output means logs appear immediately."],
@@ -2617,7 +2617,7 @@ redis            Up 42 hours <span class="ok">(healthy)</span>   127.0.0.1:6379-
 
     { k: "Deep dive 4 of 5 · Startup", track: "D", render: () => `
       <h2>What happens when the backend starts</h2>
-      ${annotated("code-main", "backend/main.py", "lifespan() line 44, app line 69, /health line 97", "The embedding model takes a few seconds to load. Why doesn't the API wait for it?", [
+      ${annotated("code-main", "backend/main.py", "lifespan() line 45, app line 70, /health line 98", "The embedding model takes a few seconds to load. Why doesn't the API wait for it?", [
         [1, 8, "The **lifespan**: everything before `yield` runs at startup, everything after at shutdown."],
         [3, 3, "Load the embedding model **in the background**, so the API is up at once and the first question doesn't pay for the load."],
         [4, 4, "Ask each MCP server for its tools (chapter 9)."],
@@ -2630,7 +2630,7 @@ redis            Up 42 hours <span class="ok">(healthy)</span>   127.0.0.1:6379-
 
     { k: "Deep dive 5 of 5 · Dependencies", track: "D", render: () => `
       <h2>How a route gets what it needs</h2>
-      ${annotated("code-deps", "backend/api/deps.py", "get_gateway() line 56", "The chat route never builds a ChatService. Who does?", [
+      ${annotated("code-deps", "backend/api/deps.py", "get_gateway() line 65", "The chat route never builds a ChatService. Who does?", [
         [1, 4, "Build the model catalog from `config/models.yaml`. `@lru_cache` makes it a single shared instance."],
         [6, 8, "The gateway is built from the catalog and the tracer. All the wiring lives in this one file."],
         [10, 12, "The chat service, built once, with its retriever, gateway, memory and agent."],
@@ -2960,7 +2960,7 @@ All parents get **16 weeks of fully paid parental leave**. This applies…</pre>
 
     { k: "Deep dive 1 of 5 · Pipeline", track: "D", render: () => `
       <h2>One document through the pipeline</h2>
-      ${annotated("code-ingest", "backend/ingestion/pipeline.py", "ingest_document(), line 90", "What does a re-run cost when nothing has changed?", [
+      ${annotated("code-ingest", "backend/ingestion/pipeline.py", "ingest_document(), line 95", "What does a re-run cost when nothing has changed?", [
         [3, 5, "Fingerprint the content (SHA-256). Unchanged since the last run means skip it, unless `--force`."],
         [7, 7, "Mark it **processing**, so the Knowledge page shows the work in progress."],
         [9, 9, "Parse: Markdown, HTML or PDF become plain text with Markdown headings."],
@@ -2995,7 +2995,7 @@ All parents get **16 weeks of fully paid parental leave**. This applies…</pre>
 
     { k: "Deep dive 4 of 5 · Vector search", track: "D", render: () => `
       <h2>The search itself</h2>
-      ${annotated("code-vector", "backend/retrieval/vector.py", "VectorRetriever.retrieve(), line 30", "Where is the nearest-neighbour search actually done: in Python or in Postgres?", [
+      ${annotated("code-vector", "backend/retrieval/vector.py", "VectorRetriever.retrieve(), line 31", "Where is the nearest-neighbour search actually done: in Python or in Postgres?", [
         [1, 3, "The `Retriever` interface: every search strategy takes a question and returns ranked chunks. Chapter 4 adds keyword, hybrid and reranked ones."],
         [4, 4, "The question becomes a vector, with the query prefix."],
         [5, 5, "pgvector's `<=>`, cosine distance: 0 is the same direction, 2 the opposite."],
@@ -4004,7 +4004,7 @@ A full-time position at Acme Corp is 8 hours a day, …
 
     { k: "Deep dive 4 of 5 · After the answer", track: "D", render: () => `
       <h2>Citations come last</h2>
-      ${annotated("code-after", "backend/services/chat_service.py", "stream_reply(), line 350", "Where are citations saved, so they come back when you reload the chat?", [
+      ${annotated("code-after", "backend/services/chat_service.py", "stream_reply(), line 363", "Where are citations saved, so they come back when you reload the chat?", [
         [1, 2, "The full answer, also recorded on the Langfuse trace."],
         [3, 4, "Only now, with the whole answer, can Atlas know which sources it cited."],
         [6, 16, "Save the message with its model, prompt version, tokens, trace id and citations. Reloading the chat brings the chips back."],
@@ -4636,7 +4636,7 @@ create_ticket({ "project": "IT", "summary": "Laptop screen broken - repair reque
 
     { k: "Deep dive 6 of 6 · Remember", track: "D", render: () => `
       <h2>Storing a lasting fact</h2>
-      ${annotated("code-remember", "backend/services/memory.py", "LongTermMemory.remember(), line 77", "You mention the same fact in three chats. How many copies are stored?", [
+      ${annotated("code-remember", "backend/services/memory.py", "LongTermMemory.remember(), line 80", "You mention the same fact in three chats. How many copies are stored?", [
         [2, 3, "Runs after the answer, in the background."],
         [4, 12, "The cheap model fills a small schema: a list of lasting facts, usually empty. Traced as `memory_extract`."],
         [13, 15, "If the model fails, store nothing. Memory is never worth failing a turn."],

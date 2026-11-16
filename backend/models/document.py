@@ -105,6 +105,9 @@ class ChunkRecord(Base):
     heading: Mapped[str | None] = mapped_column(Text)  # e.g. "Values > Iteration"
     token_count: Mapped[int]
     embedding: Mapped[list[float]] = mapped_column(Vector(EMBEDDING_DIMENSIONS))
+    # Phase 7: why the injection scan quarantined this chunk (None = safe). Quarantined chunks
+    # stay in the table, so the Knowledge page can show them, but retrieval skips them.
+    quarantine_reason: Mapped[str | None] = mapped_column(Text, default=None)
     # Keyword search (Phase 3): the chunk's words, lower-cased, stemmed ("changes" -> "chang")
     # and without stop words, with their positions. Built by Postgres' to_tsvector() from the
     # document title + heading + text, so "Expense Policy" matches a chunk that only says

@@ -14,6 +14,7 @@ import os
 import re
 import subprocess
 import sys
+import uuid
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -32,13 +33,23 @@ os.environ["LANGFUSE_SECRET_KEY"] = ""
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy import text  # noqa: E402
 
-from api.deps import get_chat_service, get_prompts, get_settings  # noqa: E402
+from api.deps import (  # noqa: E402  # noqa: E402
+    CurrentUser,
+    get_chat_service,
+    get_current_user,
+    get_prompts,
+    get_rate_limiter,
+    get_settings,
+)
+from core.auth_config import RateLimits  # noqa: E402
 from core.db import get_session_factory  # noqa: E402
 from core.embeddings import Embedder  # noqa: E402
 from core.interfaces.retriever import Chunk, RetrievalFilters, Retriever  # noqa: E402
 from core.llm import ChatMessage, Completion, LLMError, LLMGateway, TextDelta  # noqa: E402
+from core.rate_limit import RateLimiter  # noqa: E402
 from core.tracing import Span, Tracer  # noqa: E402
 from main import app  # noqa: E402
+from models import User  # noqa: E402
 from services.chat_service import ChatService  # noqa: E402
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -62,11 +73,36 @@ async def db() -> None:
     async with get_session_factory()() as session:
         await session.execute(
             text(
-                "TRUNCATE conversations, messages, eval_runs, eval_results, documents, chunks,"
-                " memories, sim_tickets, sim_slack_messages CASCADE"
+                "TRUNCATE users, conversations, messages, eval_runs, eval_results, documents,"
+                " chunks, memories, sim_tickets, sim_slack_messages CASCADE"
             )
         )
+        session.add(
+            User(
+                id=TEST_USER.id, email=TEST_USER.email, name=TEST_USER.name,
+                password_hash="scrypt$unused$unused", access_tags=TEST_USER.access_tags,
+            )
+        )  # fmt: skip
         await session.commit()
+
+
+# Phase 7: every API test runs as this logged-in user (row created by the `db` fixture).
+TEST_USER = CurrentUser(
+    id=uuid.UUID("00000000-0000-4000-8000-000000000001"),
+    email="test@acme.example",
+    name="Test User",
+    role=None,
+    access_tags=["public"],
+)
+
+
+@pytest.fixture(autouse=True)
+def logged_in() -> None:
+    """Log every test in, and switch rate limits off. Re-applied before each test because
+    many tests clear app.dependency_overrides when they finish. tests/test_auth.py removes
+    the override to test the real login."""
+    app.dependency_overrides[get_current_user] = lambda: TEST_USER
+    app.dependency_overrides[get_rate_limiter] = lambda: RateLimiter(None, RateLimits())
 
 
 class FakeGateway(LLMGateway):

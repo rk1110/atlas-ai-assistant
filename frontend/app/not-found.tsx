@@ -1,19 +1,19 @@
 import Link from "next/link";
 
-import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
 
+/**
+ * 404 for URLs that match no page at all. It renders outside the (main) layout, so without
+ * the sidebar; a missing conversation uses app/(main)/not-found.tsx instead.
+ */
 export default function NotFound() {
   return (
-    <>
-      <PageHeader title="Not found" />
-      <div className="mx-auto flex max-w-md flex-col items-center gap-4 px-4 py-24 text-center">
-        <h2 className="text-lg font-semibold">Nothing here</h2>
-        <p className="text-sm text-muted-foreground">This page or conversation doesn&apos;t exist, or it was deleted.</p>
-        <Button asChild>
-          <Link href="/">Start a new chat</Link>
-        </Button>
-      </div>
-    </>
+    <main className="mx-auto flex min-h-svh max-w-md flex-col items-center justify-center gap-4 px-4 text-center">
+      <h1 className="text-lg font-semibold">Nothing here</h1>
+      <p className="text-sm text-muted-foreground">This page doesn&apos;t exist.</p>
+      <Button asChild>
+        <Link href="/">Go to Atlas</Link>
+      </Button>
+    </main>
   );
 }
