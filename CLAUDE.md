@@ -96,7 +96,7 @@ cd backend && uv run python -m scripts.fetch_gitlab_handbook # refresh data/gitl
 docker compose exec backend alembic revision --autogenerate --rev-id 000N -m "what"  # new migration (review it!)
 docker compose exec backend alembic upgrade head            # apply migrations (also runs on backend start)
 
-cd frontend && npm run lint && npx tsc --noEmit             # frontend lint + type check
+cd frontend && npm run lint && npm run typecheck            # frontend lint + type check
 cd frontend && npm run dev                                  # frontend outside Docker
 ```
 

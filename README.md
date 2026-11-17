@@ -126,7 +126,7 @@ Chat models are listed in [`config/models.yaml`](config/models.yaml); prompts ar
 
 ```bash
 cd backend && uv run pytest                                   # backend tests (fake LLM, test database)
-cd frontend && npm run lint && npx tsc --noEmit               # frontend lint + type check
+cd frontend && npm run lint && npm run typecheck              # frontend lint + type check
 docker compose exec backend python -m evals.run --retrieval-only   # retrieval evals, no model calls
 docker compose exec backend python -m evals.run               # full evals with an LLM judge
 docker compose exec backend python -m evals.agent_run         # routing, actions, approval gate
