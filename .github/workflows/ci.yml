@@ -105,8 +105,14 @@ jobs:
           path: ~/.cache/huggingface
           key: hf-${{ hashFiles('config/rag.yaml') }}
       - run: uv run alembic upgrade head
-      - run: uv run python -m ingestion.run
+      # --text-only: the scanned PDF and the chart image need the vision model, and CI has no
+      # model keys. Their questions (tag "multimodal") are left out of the gate below and run
+      # on demand instead: docker compose exec backend python -m evals.run --tag multimodal
+      - run: uv run python -m ingestion.run --text-only
       # The gates sit a little below today's scores (hybrid, 2026-10-30: hit rate 96%,
       # MRR 0.847 on 46 scored questions), so noise doesn't fail builds but a real drop does.
       # Raise them when retrieval improves; never lower them to make a PR pass.
-      - run: uv run python -m evals.run --retrieval-only --min-hit-rate 0.93 --min-mrr 0.80
+      # 2026-11-17, first run on GitHub: hit rate 93%, MRR 0.822 (no Neo4j in CI).
+      - run: >-
+          uv run python -m evals.run --retrieval-only --exclude-tag multimodal
+          --min-hit-rate 0.93 --min-mrr 0.80

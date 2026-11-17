@@ -47,6 +47,7 @@ class DocumentResult:
     quarantined: int = 0  # chunks the injection scan held back (Phase 7)
     seconds: float = 0.0
     error: str | None = None
+    note: str | None = None  # why a document was skipped, when it wasn't simply unchanged
 
 
 @dataclass
@@ -79,13 +80,20 @@ class IngestionPipeline:
         source: DataSource,
         *,
         force: bool = False,
+        skip_types: frozenset[str] = frozenset(),
         on_result: Callable[[DocumentResult], None] | None = None,
     ) -> SourceReport:
+        """`skip_types` leaves documents of those content types untouched (CI has no vision
+        model for PDFs and images). They still count as seen, so they aren't removed."""
         report = SourceReport(source=source.name)
         seen: set[str] = set()
         async for document in source.load():
             seen.add(document.id)
-            result = await self.ingest_document(document, force=force)
+            if document.content_type in skip_types:
+                note = f"{document.content_type}: not read (text only)"
+                result = DocumentResult(document.id, "skipped", note=note)
+            else:
+                result = await self.ingest_document(document, force=force)
             report.results.append(result)
             if on_result:
                 on_result(result)

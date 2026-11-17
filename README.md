@@ -62,7 +62,7 @@ answers and sources.
 | Scanned PDF + chart questions: right source found | **100%** |
 | Speech-to-text word error rate (local Whisper) | **3.8%** |
 | Permission leaks (5 questions × 3 users with different roles) | **0** |
-| Backend tests | 179 |
+| Backend tests | 181 |
 
 The reasoning behind each choice, and what was tried and rejected, is in the
 [decision log](docs/decisions.md).

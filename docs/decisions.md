@@ -407,3 +407,13 @@ Retrieval-only (46 scored questions): vector 89% / 0.809 · keyword 91% / 0.767 
 - `evals.guardrails_run --part attacks`: attack success rate unprotected vs protected (and `--prompt v5` vs v6).
 - Phase 7B: semantic cache threshold and cheap/strong routing, built with defaults; tune them on the golden set.
 - A full `evals.run` and `evals.agent_run` after Phase 7, for the walkthrough.
+
+## 2026-11-17 · Published on GitHub; first CI run fixed
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Frontend type check runs `next typegen` first (`npm run typecheck`) | `PageProps`/`LayoutProps` are generated into `.next/`; a fresh checkout has none, so `tsc` failed in CI while passing locally | Commit generated types (stale, noisy diffs); run a full `next build` in CI (slower) |
+| CI ingests with `ingestion.run --text-only` and gates retrieval with `--exclude-tag multimodal` | The scanned PDF and the chart image need the vision model and CI has no model keys; reproduced locally, both failed and the gate fell to 84% because their 5 questions had no source | A model key as a CI secret (costs money per push, credits not available); commit the vision transcripts; let ingestion failures pass (hides real failures) |
+| Skipped documents still count as "seen" | Otherwise a `--text-only` run against a real database would delete the scan and image as "removed" | Filter in the source (would prune them) |
+
+**Measured** (CI reproduction, fresh database, no keys, no Neo4j): hit rate 93%, MRR 0.822, so the 0.93 / 0.80 gates pass with no margin. Phase 3 measured 96% / 0.847 on 46 questions; the misses now are `gitlab-ticker-symbol`, `acme-2fa-sms`, `acme-overtime-comp`. Worth a look before the next retrieval change: a single new miss fails CI.

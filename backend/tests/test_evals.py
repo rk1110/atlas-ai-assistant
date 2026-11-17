@@ -40,3 +40,10 @@ def test_agent_tasks_load_and_matching_is_a_case_insensitive_subset():
     assert _matches(proposal, ExpectedAction(tool="create_ticket", args={"project": "IT"}))
     assert not _matches(proposal, ExpectedAction(tool="create_ticket", args={"project": "HR"}))
     assert not _matches(proposal, ExpectedAction(tool="post_slack_message"))
+
+
+def test_exclude_tag_leaves_those_questions_out():
+    golden = load_golden_set()
+    rest = golden.filtered(exclude_tag="multimodal")
+    assert rest and all("multimodal" not in q.tags for q in rest)
+    assert len(rest) < len(golden.questions)

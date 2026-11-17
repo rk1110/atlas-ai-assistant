@@ -370,6 +370,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Atlas golden-set evals.")
     parser.add_argument("--model", help="model id from config/models.yaml (default: chat model)")
     parser.add_argument("--tag", help="only questions with this tag")
+    parser.add_argument("--exclude-tag", help="leave out questions with this tag")
     parser.add_argument("--limit", type=int, help="only the first N questions")
     parser.add_argument("--notes", help="what this run is testing, stored with the run")
     parser.add_argument(
@@ -399,7 +400,7 @@ def main() -> None:
         parser.error(f"unknown model '{model_id}'. Options: {[m.id for m in catalog.list()]}")
 
     golden = load_golden_set()
-    questions = golden.filtered(tag=args.tag, limit=args.limit)
+    questions = golden.filtered(tag=args.tag, limit=args.limit, exclude_tag=args.exclude_tag)
     if not questions:
         parser.error("no questions match those filters")
 

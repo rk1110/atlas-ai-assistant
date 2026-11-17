@@ -53,8 +53,14 @@ class GoldenSet(BaseModel):
             raise ValueError(f"duplicate question ids: {duplicates}")
         return self
 
-    def filtered(self, tag: str | None = None, limit: int | None = None) -> list[GoldenQuestion]:
-        questions = [q for q in self.questions if tag is None or tag in q.tags]
+    def filtered(
+        self, tag: str | None = None, limit: int | None = None, exclude_tag: str | None = None
+    ) -> list[GoldenQuestion]:
+        questions = [
+            q
+            for q in self.questions
+            if (tag is None or tag in q.tags) and (exclude_tag is None or exclude_tag not in q.tags)
+        ]
         return questions[:limit] if limit else questions
 
 

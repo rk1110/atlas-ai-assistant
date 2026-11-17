@@ -79,3 +79,19 @@ async def test_a_bad_document_is_marked_failed_and_the_run_continues(
     async with get_session_factory()() as session:
         failed = await session.get(DocumentRecord, "t:empty.md")
     assert failed is not None and failed.status == "failed" and "no text" in (failed.error or "")
+
+
+async def test_skip_types_leaves_images_unread_and_unremoved(
+    db: None, tmp_path: Path, fake_embedder: FakeEmbedder
+):
+    write(tmp_path, "ok.md", "Fine.")
+    (tmp_path / "chart.png").write_bytes(b"\x89PNG\r\n\x1a\n")  # would need the vision model
+    report = await pipeline(fake_embedder).ingest_source(
+        AcmeDocsSource(tmp_path, name="t"), skip_types=frozenset({"image"})
+    )
+
+    assert report.count("ingested") == 1 and report.count("failed") == 0
+    skipped = [r for r in report.results if r.outcome == "skipped"]
+    assert [r.document_id for r in skipped] == ["t:chart.png"]
+    assert skipped[0].note == "image: not read (text only)"
+    assert report.removed == 0
