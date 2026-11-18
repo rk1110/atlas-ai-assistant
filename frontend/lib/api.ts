@@ -275,6 +275,28 @@ export interface Analytics {
   };
   eval_runs: EvalRunPoint[];
   usage: UsageDay[];
+  costs: CostReport;
+}
+
+/** Model spend from the usage ledger (Phase 7B; mirrors api/analytics.py CostReport). */
+export interface CostReport {
+  daily_budget_usd: number | null;
+  spent_today_usd: number;
+  total_usd: number;
+  unpriced_calls: number;
+  by_day: { day: string; model_id: string; calls: number; cost_usd: number }[];
+  by_purpose: {
+    purpose: string;
+    source: string;
+    calls: number;
+    input_tokens: number;
+    output_tokens: number;
+    cost_usd: number;
+  }[];
+  by_user: { name: string; calls: number; cost_usd: number }[];
+  cache_entries: number;
+  cache_hits: number;
+  cache_saved_usd: number;
 }
 
 /** POST /api/voice/transcribe (mirrors core/speech.py Transcript). */

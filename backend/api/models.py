@@ -10,6 +10,7 @@ from fastapi import APIRouter
 from pydantic import BaseModel
 
 from api.deps import CatalogDep
+from core.model_catalog import AUTO_MODEL_ID
 
 router = APIRouter(prefix="/api", tags=["models"])
 
@@ -32,16 +33,25 @@ async def list_models(catalog: CatalogDep) -> ModelsResponse:
     entries = catalog.list()
     # Check all models concurrently: local-server probes can take up to 0.5 s each.
     availabilities = await asyncio.gather(*(catalog.availability(e) for e in entries))
-    return ModelsResponse(
-        models=[
-            ModelInfo(
-                id=entry.id,
-                label=entry.label,
-                provider=entry.provider,
-                available=status.available,
-                unavailable_reason=status.reason,
-            )
-            for entry, status in zip(entries, availabilities, strict=True)
-        ],
-        default_model=catalog.defaults.chat,
-    )
+    models = [
+        ModelInfo(
+            id=entry.id,
+            label=entry.label,
+            provider=entry.provider,
+            available=status.available,
+            unavailable_reason=status.reason,
+        )
+        for entry, status in zip(entries, availabilities, strict=True)
+    ]
+    if catalog.auto_enabled:  # Phase 7B: first in the list, usable when both its models are
+        routed = [m for m in models if m.id in (catalog.routed(False), catalog.routed(True))]
+        down = next((m for m in routed if not m.available), None)
+        auto = ModelInfo(
+            id=AUTO_MODEL_ID,
+            label=catalog.routing.label,
+            provider="routing",
+            available=down is None,
+            unavailable_reason=f"{down.label}: {down.unavailable_reason}" if down else None,
+        )
+        models.insert(0, auto)
+    return ModelsResponse(models=models, default_model=catalog.default_selection)

@@ -18,6 +18,7 @@ import time
 from api.deps import get_ingestion_pipeline
 from core.rag_config import get_rag_config
 from core.tracing import get_tracer
+from core.usage import begin_script
 from ingestion.pipeline import DocumentResult
 from ingestion.sources import build_sources
 
@@ -71,6 +72,7 @@ def main() -> None:
         help="skip PDFs and images, which may need the vision model (CI has no model keys)",
     )
     args = parser.parse_args()
+    begin_script("ingestion")
     logging.basicConfig(level=logging.WARNING)
     raise SystemExit(asyncio.run(run(args.source, args.force, args.text_only)))
 

@@ -2,12 +2,14 @@
 which Alembic compares against the real database to autogenerate migrations.
 Add each new model module here, or Alembic won't see its table."""
 
+from models.cache import SemanticCacheEntry
 from models.conversation import Conversation
 from models.document import TEXT_SEARCH_CONFIG, ChunkRecord, DocumentRecord, search_vector
 from models.eval import EvalResult, EvalRun
 from models.memory import MemoryRecord
 from models.message import Message, MessageImage
 from models.simulated import SimSlackMessage, SimTicket
+from models.usage import LlmUsage
 from models.user import User
 
 __all__ = [
@@ -17,9 +19,11 @@ __all__ = [
     "DocumentRecord",
     "EvalResult",
     "EvalRun",
+    "LlmUsage",
     "MemoryRecord",
     "Message",
     "MessageImage",
+    "SemanticCacheEntry",
     "SimSlackMessage",
     "SimTicket",
     "User",

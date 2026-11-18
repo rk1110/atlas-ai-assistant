@@ -25,6 +25,7 @@ from core.access import set_reader_tags
 from core.agent_config import get_agent_config
 from core.auth import COOKIE_NAME, read_token
 from core.auth_config import get_auth_config
+from core.cache_config import get_cache_config
 from core.config import Settings, get_settings
 from core.db import get_session, get_session_factory
 from core.embeddings import get_embedder
@@ -39,6 +40,7 @@ from core.prompts import PromptRegistry
 from core.rag_config import RagConfig, get_rag_config
 from core.rate_limit import RateLimiter, RateLimitExceeded, RedisCounters
 from core.tracing import Tracer, get_tracer
+from core.usage import UsageLedger, set_usage_user
 from graph.store import GraphStore, get_graph_store
 from guardrails.injection import InjectionScanner
 from ingestion.pipeline import IngestionPipeline
@@ -51,6 +53,7 @@ from services.embedding_map import EmbeddingMapService
 from services.intent import IntentClassifier
 from services.memory import ConversationSummarizer, LongTermMemory
 from services.query_rewriter import QueryRewriter
+from services.semantic_cache import SemanticCache
 from simulated.store import SimulatedJira, SimulatedSlack
 from tools import get_tools
 
@@ -63,7 +66,9 @@ def get_catalog() -> ModelCatalog:
 
 @lru_cache
 def get_gateway() -> LLMGateway:
-    return LLMGateway(get_catalog(), get_tracer())
+    catalog = get_catalog()
+    ledger = UsageLedger(get_session_factory(), catalog.budget)
+    return LLMGateway(catalog, get_tracer(), ledger)
 
 
 @lru_cache
@@ -73,7 +78,12 @@ def get_prompts() -> PromptRegistry:
 
 @lru_cache
 def get_chat_service() -> ChatService:
-    return make_chat_service()
+    return make_chat_service(cache=get_semantic_cache())
+
+
+@lru_cache
+def get_semantic_cache() -> SemanticCache:
+    return SemanticCache(get_embedder(), get_session_factory(), get_cache_config())
 
 
 def make_chat_service(
@@ -81,10 +91,12 @@ def make_chat_service(
     *,
     rewrite: bool = True,
     prompts: PromptRegistry | None = None,
+    cache: SemanticCache | None = None,
 ) -> ChatService:
     """Overrides for the eval runner: `retriever` replaces config/rag.yaml's strategy
     (--retriever), `rewrite=False` turns query rewriting off (--no-rewrite), `prompts` pins
-    prompt versions (the guardrail eval's --prompt)."""
+    prompt versions (the guardrail eval's --prompt). No `cache` by default: an eval must
+    measure the model's answer, never a saved one."""
     return ChatService(
         get_gateway(),
         prompts or get_prompts(),
@@ -103,6 +115,7 @@ def make_chat_service(
         catalog=get_catalog(),
         multimodal=get_multimodal_config(),
         check_output=get_guardrails_config().output.enabled,
+        cache=cache,
     )
 
 
@@ -248,7 +261,8 @@ async def get_current_user(
 
     Also sets the reader's access tags for this request (core/access.py), so every search
     made while handling it, by the chat, the agent's tools or the Knowledge page, only sees
-    documents this user may read.
+    documents this user may read. And it charges this request's model calls to this user
+    in the usage ledger (core/usage.py).
     """
     secret = settings.auth_secret
     token = request.cookies.get(COOKIE_NAME)
@@ -257,6 +271,7 @@ async def get_current_user(
     if user is None:  # no cookie, a forged or expired token, or a deleted user
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Please log in.")
     set_reader_tags(list(user.access_tags))
+    set_usage_user(user.id)
     return CurrentUser(
         id=user.id, email=user.email, name=user.name, role=user.role,
         access_tags=list(user.access_tags),

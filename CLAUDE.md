@@ -79,8 +79,11 @@ docker compose exec backend python -m evals.run --retrieval-only   # hit rate + 
 docker compose exec backend python -m evals.run --retrieval-only --retriever all   # compare retrieval strategies
 docker compose exec backend python -m evals.run --retriever vector --no-rewrite    # full run with Phase 2 settings
 docker compose exec backend python -m evals.run --no-judge  # skip the LLM-as-judge scores
+docker compose exec backend python -m evals.run --model auto --budget 0.60   # Auto routing (Haiku/Sonnet) vs a named model
+docker compose exec backend python -m evals.run --budget 0.50   # stop once this run has spent $0.50 (also agent_run, guardrails_run)
 docker compose exec backend python -m evals.run --tag multimodal   # scanned PDF + chart questions (Phase 6)
 docker compose exec backend python -m evals.voice_run   # speech-to-text word error rate (--model small, --no-prompt)
+docker compose exec backend python -m evals.cache_run      # semantic cache threshold: hit rate vs wrong answers (free, local embeddings)
 docker compose exec backend python -m evals.guardrails_run   # injection, quarantine, attacks, PII, permissions (--part permissions)
 docker compose exec -e HF_HUB_OFFLINE=0 backend python -m evals.voice_run   # first time: also downloads Whisper
 docker compose exec backend python -m evals.agent_run       # agent evals: routing, actions, approval gate
@@ -98,6 +101,10 @@ docker compose exec backend alembic upgrade head            # apply migrations (
 
 cd frontend && npm run lint && npm run typecheck            # frontend lint + type check
 cd frontend && npm run dev                                  # frontend outside Docker
+
+# Production (Phase 7D, docs/deploy.md): prod images + migrate job, no bind mounts, HTTPS cookies
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+cd frontend && npm run build                                # production build check (CI runs it too)
 ```
 
 | URL | What |
@@ -118,7 +125,7 @@ cd frontend && npm run dev                                  # frontend outside D
 | 4 | Agents + tools (LangGraph agent, tools, approval cards, memory) | Built (2026-10-31; agent evals: routing 100%, actions 88%, unapproved writes 0); walkthrough + demo script written; quiz + exercises pending |
 | 5 | Multi-agent + MCP (4-agent team, Jira/Slack MCP, own MCP server, agent graph UI) | Built (2026-10-31; team 88% = single 88% at 2.5x calls; Jira/Slack via MCP; Atlas MCP server over stdio); Claude Desktop check, quiz + exercises pending |
 | 6 | Multimodal + voice | Built (2026-11-08; image questions via Gemma 4, scanned PDFs + charts in the KB: multimodal evals hit 100% / correct 90%; voice: local Whisper base, WER 3.8%, browser read-aloud); walkthrough written; quiz + exercises pending |
-| 7 | Production-ready (guardrails, caching, routing, auth, cost dashboard, deploy) | In progress: A built (injection quarantine, prompt v6, output check, PII masking); C built (demo login via backend cookie, per-user chats/memory, permission-aware retrieval: 0 leaks, rate limits); B (cache, routing) and D (deploy-ready, no public deploy) next. Model-dependent evals deferred until credits are added (see decisions.md) |
+| 7 | Production-ready (guardrails, caching, routing, auth, cost dashboard, deploy) | Built (A-D); walkthrough + deferred 7A measurements pending. A built (injection quarantine, prompt v6, output check, PII masking); C built (demo login via backend cookie, per-user chats/memory, permission-aware retrieval: 0 leaks, rate limits); B built 2026-11-18 (cost ledger + daily/per-run budget caps + cost dashboard; semantic cache, threshold 0.98 = 0 wrong answers; Auto routing: -61% answer cost, correctness 83% vs 82%); D built 2026-11-18 (prod images: standalone Next.js build + non-root backend, docker-compose.prod.yml with a migrate job, HTTPS-only cookies, CI builds both images, docs/deploy.md; no public deploy). Back on Claude ($5 credit); remaining 7A measurements in decisions.md |
 | 8 | Fine-tune + launch (Ollama, LoRA, demo video, README) | Not started |
 
 A phase is "Done" only when its "Done when" criteria in `docs/PLAN.md` are met, the walkthrough doc exists, and I've completed the quiz and my exercises.

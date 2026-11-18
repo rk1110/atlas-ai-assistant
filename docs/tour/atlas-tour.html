@@ -692,22 +692,22 @@ mark.x { background: var(--bad-soft); color: var(--bad); border-radius: 3px; pad
   {"file": "frontend/lib/use-chat-stream.ts", "line": 95, "text": "const handle = (event"},
   {"file": "frontend/lib/use-chat-stream.ts", "line": 251, "text": "async function readEvents"},
   {"file": "backend/api/chat.py", "line": 32, "text": "async def chat("},
-  {"file": "backend/services/chat_service.py", "line": 176, "text": "async def stream_reply("},
-  {"file": "backend/services/chat_service.py", "line": 326, "text": "sources = await self._retrieve("},
-  {"file": "backend/services/chat_service.py", "line": 386, "text": "yield DoneEvent("},
-  {"file": "backend/core/llm.py", "line": 147, "text": "async def stream_chat("},
+  {"file": "backend/services/chat_service.py", "line": 179, "text": "async def stream_reply("},
+  {"file": "backend/services/chat_service.py", "line": 357, "text": "sources = await self._retrieve("},
+  {"file": "backend/services/chat_service.py", "line": 424, "text": "yield DoneEvent("},
+  {"file": "backend/core/llm.py", "line": 151, "text": "async def stream_chat("},
   {"file": "backend/core/events.py", "line": 25, "text": "class TokenEvent("},
-  {"file": "backend/core/events.py", "line": 192, "text": "def to_sse("},
+  {"file": "backend/core/events.py", "line": 193, "text": "def to_sse("},
   {"file": "docker-compose.yml", "line": 191, "text": "  backend:"},
-  {"file": "docker-compose.yml", "line": 232, "text": "alembic upgrade head && exec uvicorn"},
-  {"file": "backend/Dockerfile", "line": 23, "text": "uv sync --frozen"},
+  {"file": "docker-compose.yml", "line": 233, "text": "alembic upgrade head && exec uvicorn"},
+  {"file": "backend/Dockerfile", "line": 27, "text": "uv sync --frozen"},
   {"file": "infra/postgres/init.sql", "line": 9, "text": "CREATE DATABASE langfuse"},
   {"file": "backend/core/config.py", "line": 21, "text": "class Settings(BaseSettings)"},
   {"file": "backend/core/config.py", "line": 86, "text": "def get_settings()"},
   {"file": "backend/main.py", "line": 45, "text": "async def lifespan("},
   {"file": "backend/main.py", "line": 70, "text": "app = FastAPI("},
   {"file": "backend/main.py", "line": 98, "text": "@app.get(\"/health\")"},
-  {"file": "backend/api/deps.py", "line": 65, "text": "def get_gateway()"},
+  {"file": "backend/api/deps.py", "line": 68, "text": "def get_gateway()"},
   {"file": "backend/ingestion/pipeline.py", "line": 103, "text": "async def ingest_document("},
   {"file": "backend/ingestion/pipeline.py", "line": 231, "text": "def embedding_text("},
   {"file": "backend/ingestion/chunkers/markdown.py", "line": 73, "text": "def _chunk_section("},
@@ -737,16 +737,16 @@ mark.x { background: var(--bad-soft); color: var(--bad); border-radius: 3px; pad
   {"file": "backend/services/grounding.py", "line": 26, "text": "def format_sources("},
   {"file": "backend/services/grounding.py", "line": 47, "text": "def cited_numbers("},
   {"file": "backend/services/grounding.py", "line": 59, "text": "def citations_for("},
-  {"file": "backend/services/chat_service.py", "line": 366, "text": "citations = citations_for(answer, sources)"},
+  {"file": "backend/services/chat_service.py", "line": 397, "text": "citations = citations_for(answer, sources)"},
   {"file": "frontend/components/chat/citation-chip.tsx", "line": 14, "text": "export function CitationChip("},
   {"file": "frontend/components/chat/answer-markdown.tsx", "line": 11, "text": "const MARKER ="},
   {"file": "backend/evals/metrics.py", "line": 18, "text": "def reciprocal_rank("},
   {"file": "backend/evals/judge.py", "line": 31, "text": "class Claim(BaseModel)"},
   {"file": "backend/evals/judge.py", "line": 81, "text": "def score("},
-  {"file": "backend/evals/run.py", "line": 300, "text": "results: dict[str, dict[str, Any]] = {}"},
+  {"file": "backend/evals/run.py", "line": 309, "text": "results: dict[str, dict[str, Any]] = {}"},
   {"file": "backend/evals/golden_set.yaml", "line": 283, "text": "id: acme-followup-vacation-carryover"},
-  {"file": ".github/workflows/ci.yml", "line": 78, "text": "retrieval-evals:"},
-  {"file": ".github/workflows/ci.yml", "line": 118, "text": "--min-hit-rate 0.93 --min-mrr 0.80"},
+  {"file": ".github/workflows/ci.yml", "line": 93, "text": "retrieval-evals:"},
+  {"file": ".github/workflows/ci.yml", "line": 133, "text": "--min-hit-rate 0.93 --min-mrr 0.80"},
   {"file": "backend/core/interfaces/tool.py", "line": 57, "text": "requires_approval: ClassVar[bool] = False"},
   {"file": "backend/tools/tickets.py", "line": 33, "text": "requires_approval = True"},
   {"file": "backend/agents/graph.py", "line": 48, "text": "def after_assistant("},
@@ -2197,7 +2197,7 @@ switch (event.type) {
 
     { k: "Deep dive 3 of 6 · Chat service", track: "D", render: () => `
       <h2>The conductor: the answer path in 15 lines</h2>
-      ${annotated("code-service", "backend/services/chat_service.py", "stream_reply() line 176, _stream_reply() lines 326–386", "Citations are sent at the very end, after all the text. Why not with the first words?", [
+      ${annotated("code-service", "backend/services/chat_service.py", "stream_reply() line 179, _stream_reply() lines 326–386", "Citations are sent at the very end, after all the text. Why not with the first words?", [
         [1, 2, "One Langfuse **trace** per chat turn. Its session id is the conversation id, so Langfuse can replay a whole chat."],
         [3, 9, "The safety net. Whatever breaks inside, the user gets a safe message (never internals) and **every stream ends with `done`**. The browser relies on that to stop the spinner."],
         [12, 12, "**Retrieve**: find the 5 best passages. Chapters 3–5 open this line."],
@@ -2209,7 +2209,7 @@ switch (event.type) {
 
     { k: "Deep dive 4 of 6 · LLM gateway", track: "D", render: () => `
       <h2>The gateway: the only door to a model</h2>
-      ${annotated("code-gateway", "backend/core/llm.py", "stream_chat(), line 147", "The chat service never mentions Ollama or an API key. Where do they come from?", [
+      ${annotated("code-gateway", "backend/core/llm.py", "stream_chat(), line 151", "The chat service never mentions Ollama or an API key. Where do they come from?", [
         [1, 1, "Look up the model's entry in `config/models.yaml`: provider, LiteLLM name, which key, settings. Switching models is a config change."],
         [2, 2, "Open a Langfuse **generation** inside the caller's trace, recording the model and prompt version (`chat_system@v4`)."],
         [3, 8, "**LiteLLM** turns this one call into the provider's own API. `stream=True` asks for text as it's generated; `include_usage` asks for token counts at the end."],
@@ -2220,7 +2220,7 @@ switch (event.type) {
 
     { k: "Deep dive 5 of 6 · Events", track: "D", render: () => `
       <h2>The event contract</h2>
-      ${annotated("code-events", "backend/core/events.py", "TokenEvent line 25, to_sse() line 192", "What exactly goes over the network for one token?", [
+      ${annotated("code-events", "backend/core/events.py", "TokenEvent line 25, to_sse() line 193", "What exactly goes over the network for one token?", [
         [1, 3, "Each event is a Pydantic model with a fixed `type`. The frontend has the exact mirror in `frontend/lib/events.ts`: same names, same fields."],
         [5, 9, "A **discriminated union**: an event is one of seven shapes, and `type` says which. Both Python and TypeScript use it to check the rest of the fields."],
         [11, 12, "The whole SSE format: `data: ` + the event as JSON + a blank line. One token on the wire is `data: {\"type\":\"token\",\"text\":\" provides\"}`."],
@@ -2594,7 +2594,7 @@ redis            Up 42 hours <span class="ok">(healthy)</span>   127.0.0.1:6379-
 
     { k: "Deep dive 2 of 5 · Dockerfile", track: "D", render: () => `
       <h2>How the backend image is built</h2>
-      ${annotated("code-dockerfile", "backend/Dockerfile", "uv sync on line 23", "Why copy the dependency files before the rest of the code?", [
+      ${annotated("code-dockerfile", "backend/Dockerfile", "uv sync on line 27", "Why copy the dependency files before the rest of the code?", [
         [1, 1, "An exact base image version, like every dependency in Atlas."],
         [2, 2, "**uv**, a fast Python package manager, copied in as one file."],
         [3, 5, "The virtual environment lives outside `/app/backend`, so the bind mount of your code doesn't hide it. Unbuffered output means logs appear immediately."],
@@ -2630,7 +2630,7 @@ redis            Up 42 hours <span class="ok">(healthy)</span>   127.0.0.1:6379-
 
     { k: "Deep dive 5 of 5 · Dependencies", track: "D", render: () => `
       <h2>How a route gets what it needs</h2>
-      ${annotated("code-deps", "backend/api/deps.py", "get_gateway() line 65", "The chat route never builds a ChatService. Who does?", [
+      ${annotated("code-deps", "backend/api/deps.py", "get_gateway() line 68", "The chat route never builds a ChatService. Who does?", [
         [1, 4, "Build the model catalog from `config/models.yaml`. `@lru_cache` makes it a single shared instance."],
         [6, 8, "The gateway is built from the catalog and the tracer. All the wiring lives in this one file."],
         [10, 12, "The chat service, built once, with its retriever, gateway, memory and agent."],
@@ -4323,7 +4323,7 @@ A full-time position at Acme Corp is 8 hours a day, …
 
     { k: "Deep dive 4 of 5 · The gate", track: "D", render: () => `
       <h2>Turning numbers into pass or fail</h2>
-      ${annotated("code-gate", "backend/evals/run.py", "run_retrieval_only(), line 300", "With `--retriever all`, which strategy's score decides the gate?", [
+      ${annotated("code-gate", "backend/evals/run.py", "run_retrieval_only(), line 309", "With `--retriever all`, which strategy's score decides the gate?", [
         [2, 3, "One retriever per strategy, so several can be compared in one run."],
         [6, 8, "For each question: search, then the reciprocal rank of the returned document ids."],
         [9, 13, "With one strategy, print each question's position: #1, #3 or miss."],

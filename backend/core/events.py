@@ -33,6 +33,7 @@ ErrorCode = Literal[
     # Model/provider problems (mirrors core.llm.LLMErrorKind; a test keeps them in sync)
     "unknown_model", "unavailable", "auth", "rate_limit", "bad_request",
     "context_too_long", "refusal", "timeout", "billing", "invalid_output", "provider_error",
+    "budget",  # Phase 7B: the daily or per-run spending cap is used up
     # Atlas's own problems
     "validation", "internal",
 ]  # fmt: skip

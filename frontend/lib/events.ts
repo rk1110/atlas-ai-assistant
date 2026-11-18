@@ -30,6 +30,7 @@ export type ErrorCode =
   | "billing"
   | "invalid_output"
   | "provider_error"
+  | "budget"
   // Atlas's own problems
   | "validation"
   | "internal";

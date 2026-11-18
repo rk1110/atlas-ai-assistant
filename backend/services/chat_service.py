@@ -28,7 +28,7 @@ import logging
 import uuid
 from collections.abc import AsyncIterator
 from contextlib import aclosing
-from datetime import date
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any, Literal
 
@@ -55,16 +55,17 @@ from core.images import decode_image
 from core.interfaces.retriever import Chunk, Retriever
 from core.llm import ChatMessage, Completion, ImagePart, LLMError, LLMGateway, TextDelta
 from core.memory_config import MemoryConfig
-from core.model_catalog import ModelCatalog
+from core.model_catalog import AUTO_MODEL_ID, ModelCatalog
 from core.multimodal_config import MultimodalConfig
 from core.prompts import PromptRegistry, RenderedPrompt
 from core.tracing import Span, Tracer
 from guardrails.output import unsupported_destinations
 from models import Conversation, Message, MessageImage
 from services.grounding import citations_for, format_sources
-from services.intent import IntentClassifier
+from services.intent import IntentClassification, IntentClassifier
 from services.memory import NO_MEMORY, ConversationSummarizer, LongTermMemory, format_memory
 from services.query_rewriter import QueryRewriter
+from services.semantic_cache import CacheHit, CacheScope, SemanticCache
 
 logger = logging.getLogger(__name__)
 
@@ -140,6 +141,7 @@ class ChatService:
         catalog: ModelCatalog | None = None,
         multimodal: MultimodalConfig | None = None,
         check_output: bool = False,
+        cache: SemanticCache | None = None,
     ):
         self._gateway = gateway
         self._retriever = retriever
@@ -157,6 +159,7 @@ class ChatService:
         self._catalog = catalog
         self._multimodal = multimodal or MultimodalConfig()
         self._check_output = check_output  # Phase 7: flag unsupported links in answers
+        self._cache = cache  # Phase 7B semantic cache; None = always ask the model (evals)
         self._background: set[asyncio.Task[object]] = set()  # keeps memory tasks alive
         self._prompts = prompts
         self._settings = settings
@@ -224,7 +227,8 @@ class ChatService:
         # may already be closed.
         async with self._session_factory() as session:
             conversation = await self._get_or_create_conversation(session, request, user_id)
-            if await self._is_retry_of_last_question(session, request):
+            retry = await self._is_retry_of_last_question(session, request)
+            if retry:
                 saved = await self._last_question_images(session, request.conversation_id)
                 image_ids = [i for i, _ in saved]
                 parts = [part for _, part in saved]
@@ -268,6 +272,12 @@ class ChatService:
 
         description = ""
         if parts:  # Phase 6: an image question. Vision model, describe, then the RAG path.
+            if model_id == AUTO_MODEL_ID:  # no complexity label for images: the strong model
+                model_id, picked = self._auto_model(
+                    None, why="Image questions use the stronger model."
+                )
+                log.record(picked)
+                yield picked
             vision_id = self._vision_model(model_id)
             if vision_id != model_id:
                 yield AgentStepEvent(
@@ -293,7 +303,13 @@ class ChatService:
                 history[-1] = history[-1].model_copy(update={"images": parts})
 
         # Images skip the agent: its tools work on text, and an image question is a question.
-        route = None if parts else await self._route(request.message, trace)
+        auto = model_id == AUTO_MODEL_ID
+        label = None if parts else await self._classify(request.message, trace, auto=auto)
+        route = self._agent_route(label)
+        if auto:  # Phase 7B: the same label picks the answer model
+            model_id, picked = self._auto_model(label, agent=route is not None)
+            log.record(picked)
+            yield picked
         if route is not None:  # an action request: the agent handles the rest of the turn
             log.record(route)
             yield route
@@ -323,6 +339,21 @@ class ChatService:
                 title="Searched for",
                 detail=search_query,
             )
+        # Phase 7B: the same question, recently answered for the same scope? Reuse it.
+        # Not for images (the image is part of the question) or "retry" (wants a new answer).
+        cache_scope = None
+        if self._cache and self._cache.enabled and not parts and not retry:
+            prompt_ref = self._render_system_prompt([], memory).ref
+            cache_scope, hit = await self._check_cache(
+                search_query, model_id, prompt_ref, [f.content for f in facts], trace
+            )
+            if hit:
+                cached = self._answer_from_cache(hit, request, model_id, prompt_ref, trace)
+                async with aclosing(cached) as events:
+                    async for event in events:
+                        yield event
+                return
+
         sources = await self._retrieve(search_query, trace)
         prompt = self._render_system_prompt(sources, memory)
         llm_messages = [ChatMessage(role="system", content=prompt.text), *history]
@@ -379,10 +410,17 @@ class ChatService:
 
         for citation in citations:
             yield citation
-        if warning := self._output_warning(answer, sources, request.message):
+        warning = self._output_warning(answer, sources, request.message)
+        if warning:
             yield warning
         if error:
             yield error
+        # Only clean, complete answers are worth reusing: not a cut-off or flagged one.
+        if cache_scope and answer and not error and not warning and completion:
+            if completion.finish_reason == "stop":
+                await self._save_to_cache(
+                    cache_scope, search_query, answer, citations, model_id, completion
+                )
         yield DoneEvent(
             message_id=str(message_id) if message_id else None,
             usage=_usage(model_id, completion),
@@ -390,6 +428,83 @@ class ChatService:
             trace_id=trace.trace_id,
             trace_url=self._trace_url(trace),
         )
+
+    # ------------------------------------------------------------------ cache (Phase 7B)
+
+    async def _check_cache(
+        self, question: str, model_id: str, prompt_ref: str, facts: list[str], trace: Span
+    ) -> tuple[CacheScope | None, CacheHit | None]:
+        """Look the question up, recorded as a step in the trace. A cache failure is only a
+        miss: the question is answered normally."""
+        assert self._cache is not None
+        span = trace.span("semantic_cache", input=question)
+        try:
+            scope = await self._cache.scope(
+                question, model_id=model_id, prompt_ref=prompt_ref, facts=facts
+            )
+            hit = await self._cache.lookup(scope)
+        except Exception:
+            logger.warning("semantic cache lookup failed; answering normally", exc_info=True)
+            span.finish(error="lookup failed")
+            return None, None
+        span.finish(
+            output={"hit": True, "matched": hit.question, "similarity": hit.similarity}
+            if hit
+            else {"hit": False}
+        )
+        return scope, hit
+
+    async def _answer_from_cache(
+        self,
+        hit: CacheHit,
+        request: ChatRequest,
+        model_id: str,
+        prompt_ref: str,
+        trace: Span,
+    ) -> AsyncIterator[StreamEvent]:
+        """Same event contract as a model answer, so the UI needs no special case: a visible
+        step saying where the answer came from, the text in pieces, citations, done."""
+        saved = f" Saved ${hit.saved_usd:.4f}." if hit.saved_usd else ""
+        yield AgentStepEvent(
+            step_id="cache",
+            agent="cache",
+            status="completed",
+            title="Answered from cache",
+            detail=f'Same question as "{hit.question}" (similarity {hit.similarity:.2f}), '
+            f"answered {_ago(hit.created_at)}. No model call.{saved}",
+        )
+        for piece in _pieces(hit.answer):
+            yield TokenEvent(text=piece)
+        message_id = await self._save_assistant_message(
+            request.conversation_id, hit.answer, model_id, prompt_ref, None, None,
+            trace.trace_id, hit.citations,
+        )  # fmt: skip
+        trace.finish(output=hit.answer)
+        for citation in hit.citations:
+            yield citation
+        yield DoneEvent(
+            message_id=str(message_id),
+            prompt_ref=prompt_ref,
+            trace_id=trace.trace_id,
+            trace_url=self._trace_url(trace),
+        )
+
+    async def _save_to_cache(
+        self,
+        scope: CacheScope,
+        question: str,
+        answer: str,
+        citations: list[CitationEvent],
+        model_id: str,
+        completion: Completion,
+    ) -> None:
+        assert self._cache is not None
+        try:
+            await self._cache.store(
+                scope, question, answer, citations, model_id, completion.cost_usd
+            )
+        except Exception:
+            logger.warning("could not save the answer to the semantic cache", exc_info=True)
 
     def _output_warning(
         self, answer: str, sources: list[Chunk], question: str
@@ -415,18 +530,27 @@ class ChatService:
 
     # ------------------------------------------------------------------ agent (Phase 4)
 
-    async def _route(self, message: str, trace: Span) -> AgentStepEvent | None:
-        """Agent or RAG? The Phase 1 intent classifier (cheap model) decides. Returns the
-        step to show when the agent takes over, None for the normal RAG answer. If the
-        classifier fails, fall back to RAG: answering is safer than acting."""
-        if self._router is None or self._agent is None or not self._agent_config.enabled:
+    async def _classify(
+        self, message: str, trace: Span, *, auto: bool
+    ) -> IntentClassification | None:
+        """The Phase 1 intent classifier (cheap model), run when something needs its label:
+        agent routing (Phase 4) or "Auto" model choice (Phase 7B). One call serves both.
+        None if it fails: both callers then pick the safe option."""
+        wants_agent = self._agent is not None and self._agent_config.enabled
+        if self._router is None or not (wants_agent or auto):
             return None
         try:
             result = await self._router.classify(message, trace=trace)
         except LLMError as err:
-            logger.warning("routing failed [%s]; using RAG", err.kind)
+            logger.warning("classification failed [%s]; using the safe defaults", err.kind)
             return None
-        label = result.classification
+        return result.classification
+
+    def _agent_route(self, label: IntentClassification | None) -> AgentStepEvent | None:
+        """Agent or RAG? Returns the step to show when the agent takes over, None for the
+        normal RAG answer. Without a label, RAG: answering is safer than acting."""
+        if label is None or self._agent is None or not self._agent_config.enabled:
+            return None
         if label.intent not in self._agent_config.route_intents:
             return None
         return AgentStepEvent(
@@ -436,6 +560,32 @@ class ChatService:
             title="Action request: the agent takes over",
             detail=label.reasoning,
         )
+
+    def _auto_model(
+        self, label: IntentClassification | None, *, agent: bool = False, why: str | None = None
+    ) -> tuple[str, AgentStepEvent]:
+        """Phase 7B model routing: resolve "Auto" to a real model, and say why in the UI.
+        Simple questions get the cheap model; agent turns, images and anything unlabelled get
+        the strong one (a wrong "simple" costs answer quality, a wrong "complex" only money)."""
+        assert self._catalog is not None and self._catalog.auto_enabled  # the route checked
+        if why is None:
+            if agent:
+                why = "Actions use the stronger model: tool calls have to be exactly right."
+            elif label is None:
+                why = "Couldn't judge the question, so the stronger model answers."
+            else:
+                kind = "Simple" if label.complexity == "simple" else "Complex"
+                why = f"{kind} question: {label.reasoning}"
+        simple = label is not None and label.complexity == "simple" and not agent
+        model_id = self._catalog.routed(complex_=not simple)
+        step = AgentStepEvent(
+            step_id="model_route",
+            agent="router",
+            status="completed",
+            title=f"Auto picked {self._label(model_id)}",
+            detail=why,
+        )
+        return model_id, step
 
     async def check_approval(self, decision: ApprovalDecision) -> bool:
         """Before streaming: is a run in this conversation waiting for this approval?"""
@@ -452,6 +602,8 @@ class ChatService:
     ) -> AsyncIterator[StreamEvent]:
         """Continue a paused agent run with the human's decision. Same stream contract as
         stream_reply: events, then always `done`."""
+        if model_id == AUTO_MODEL_ID and self._catalog:  # agent turns always use the strong one
+            model_id = self._catalog.routed(complex_=True)
         trace = self._tracer.start_trace(
             "agent_resume",
             input={"approval_id": decision.approval_id, "decision": decision.decision},
@@ -778,6 +930,9 @@ class ChatService:
             trace_name, input=question, session_id=session_id, tags=tags
         )
         earlier = history or []
+        if model_id == AUTO_MODEL_ID:  # `evals.run --model auto`: route exactly like the chat
+            label = await self._classify(question, trace, auto=True)
+            model_id, _ = self._auto_model(label)
         search_query = await self.rewrite_query(question, earlier, trace)
         chunks = await self._retrieve(search_query, trace)
         prompt = self._render_system_prompt(chunks, NO_MEMORY)  # evals: no personal memory
@@ -940,6 +1095,15 @@ def _combined(completions: list[Completion]) -> Completion | None:
             "time_to_first_token_ms": None,
         }
     )
+
+
+def _ago(when: datetime) -> str:
+    minutes = int((datetime.now(UTC) - when).total_seconds() // 60)
+    if minutes < 1:
+        return "just now"
+    if minutes < 60:
+        return f"{minutes} min ago"
+    return f"{minutes // 60} h ago"
 
 
 def _earlier(history: list[ChatMessage]) -> list[ChatMessage]:

@@ -39,7 +39,7 @@ async def chat(
     # Validate what we can BEFORE streaming starts: once the 200 + first bytes are sent,
     # the HTTP status can't change, so later problems must travel as `error` events instead.
     model_id = request.model_id or catalog.defaults.chat
-    if catalog.get(model_id) is None:
+    if not catalog.is_selectable(model_id):
         raise HTTPException(status_code=400, detail=f"Unknown model '{model_id}'")
     if not await chat_service.owns_conversation(request.conversation_id, user.id):
         # 404, not 403: don't even confirm that someone else's conversation exists.
@@ -86,7 +86,7 @@ async def approval(
     it was already answered, or the id belongs to another conversation.
     """
     model_id = decision.model_id or catalog.defaults.chat
-    if catalog.get(model_id) is None:
+    if not catalog.is_selectable(model_id):
         raise HTTPException(status_code=400, detail=f"Unknown model '{model_id}'")
     owner = await chat_service.owns_conversation(decision.conversation_id, user.id)
     if not owner or not await chat_service.check_approval(decision):

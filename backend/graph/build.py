@@ -21,6 +21,7 @@ from api.deps import get_catalog, get_gateway, get_prompts, get_tracer
 from core.db import get_session_factory
 from core.llm import LLMError
 from core.rag_config import get_rag_config
+from core.usage import begin_script
 from graph.extract import GraphExtractor
 from graph.store import get_graph_store
 from ingestion.parsers import parse
@@ -108,7 +109,9 @@ async def _quarantined_documents() -> set[str]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Extract documents into the knowledge graph.")
     parser.add_argument("--force", action="store_true", help="re-extract unchanged documents")
-    raise SystemExit(asyncio.run(build(parser.parse_args().force)))
+    force = parser.parse_args().force
+    begin_script("ingestion")
+    raise SystemExit(asyncio.run(build(force)))
 
 
 if __name__ == "__main__":

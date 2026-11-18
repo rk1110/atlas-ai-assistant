@@ -74,7 +74,8 @@ async def db() -> None:
         await session.execute(
             text(
                 "TRUNCATE users, conversations, messages, eval_runs, eval_results, documents,"
-                " chunks, memories, sim_tickets, sim_slack_messages CASCADE"
+                " chunks, memories, sim_tickets, sim_slack_messages, llm_usage, semantic_cache"
+                " CASCADE"
             )
         )
         session.add(

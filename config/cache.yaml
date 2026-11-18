@@ -1,0 +1,17 @@
+# Semantic cache (Phase 7B). Loaded by backend/core/cache_config.py; restart the backend after
+# editing. A question that MEANS the same as one answered recently gets the saved answer back,
+# with no model call: "PTO for new hires?" reuses "How many vacation days do new employees get?".
+#
+# Measure before changing the threshold:  python -m evals.cache_run  (free: local embeddings)
+
+enabled: true
+# Cosine similarity of the two (rewritten) questions, 0-1. Too low serves the wrong answer to a
+# question that only LOOKS similar; too high never hits. Measured 2026-11-18 on
+# evals/cache/paraphrases.yaml (20 same-meaning pairs, 20 look-alikes):
+#   0.90: 60% hits, 2 WRONG answers   0.92: 55% hits, 1 wrong   0.98: 10% hits, 0 wrong
+# The embedding model ignores word order: "Who does the IT Manager report to?" and "Who reports
+# to the IT Manager?" score 0.974. So only near-identical questions are safe to reuse.
+similarity_threshold: 0.98
+# Entries older than this are ignored. Answers also go stale when documents change, which the
+# cache detects separately (any ingest, upload or delete starts a fresh cache).
+ttl_hours: 24

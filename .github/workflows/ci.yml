@@ -1,7 +1,8 @@
 # CI: runs on every pull request and every push to main.
 #
 #   backend          ruff + pytest against a real Postgres + pgvector (fake LLM, fake embedder)
-#   frontend         eslint + TypeScript type check
+#   frontend         eslint + TypeScript type check + production build (next build)
+#   images           builds both production images (Phase 7D), so a broken Dockerfile fails here
 #   retrieval-evals  ingests the corpus with the REAL embedding model, then runs the golden set
 #                    in retrieval-only mode and FAILS if hit rate or MRR drop below the gates.
 #
@@ -74,6 +75,20 @@ jobs:
       # next typegen writes the PageProps/LayoutProps route types into .next/, which a fresh
       # checkout does not have (locally, next dev creates them).
       - run: npm run typecheck
+      # Phase 7D: the production build catches what dev mode forgives (prerendering errors,
+      # server/client boundary mistakes). Same command the prod image runs.
+      - run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: "1"
+
+  images:
+    runs-on: ubuntu-24.04
+    needs: [backend, frontend] # only worth building what passed its checks
+    steps:
+      - uses: actions/checkout@v7.0.1
+      # Plain `docker build` (preinstalled on the runner): no extra action to pin and trust.
+      - run: docker build --target prod -f backend/Dockerfile -t atlas-backend:prod .
+      - run: docker build --target prod -t atlas-frontend:prod frontend
 
   retrieval-evals:
     runs-on: ubuntu-24.04

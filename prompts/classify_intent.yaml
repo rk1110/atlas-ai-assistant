@@ -3,8 +3,8 @@
 # model as a JSON Schema. Field descriptions in that schema are part of the prompt too.
 
 name: classify_intent
-description: Label one user message as question, action_request or chit_chat.
-active: v1
+description: Label one user message as question, action_request or chit_chat, and simple or complex.
+active: v2
 
 versions:
   v1:
@@ -23,4 +23,40 @@ versions:
         Example: "thanks, that helped!"
 
       If a message both asks for information and requests an action, choose action_request.
+      Be honest in `confidence`: use a low value when the message is ambiguous.
+
+  v2:
+    created: 2026-11-18
+    notes: >
+      Phase 7B model routing. Adds `complexity`, so the same cheap call that routes to the agent
+      also picks the answer model in "Auto": simple -> Haiku, complex -> Sonnet. The intent
+      part is unchanged from v1.
+    variables: []
+    template: |
+      You classify a single message sent to an internal company assistant. Pick exactly one intent:
+
+      - question: the user wants information or an explanation.
+        Example: "How many vacation days do I get?"
+      - action_request: the user wants something done in another system (a ticket, a message,
+        an email, a calendar change), even if phrased politely as a question.
+        Example: "Can you open an HR ticket to confirm my leave dates?"
+      - chit_chat: greetings, thanks, or small talk with no information need.
+        Example: "thanks, that helped!"
+
+      If a message both asks for information and requests an action, choose action_request.
+
+      Then judge how hard the message is to answer well. Pick exactly one complexity:
+
+      - simple: one fact, definition or short procedure that a single passage of a policy
+        or handbook answers directly. Greetings and thanks are simple too.
+        Examples: "How many vacation days do new employees get?", "What does DRI mean?",
+        "Which Slack channel is for laptop repairs?"
+      - complex: needs several facts combined, conditions or exceptions weighed, a comparison,
+        a judgement about the user's own situation, or a chain of people or documents.
+        Examples: "Can I carry vacation days over, and what happens if I leave mid-year?",
+        "Who leads the team that owns the expense policy?",
+        "I stayed late a lot last week, do I get anything back for that?"
+
+      When unsure, choose complex: a wrong "simple" gives the user a weaker answer, a wrong
+      "complex" only costs a little more.
       Be honest in `confidence`: use a low value when the message is ambiguous.

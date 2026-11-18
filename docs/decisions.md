@@ -417,3 +417,70 @@ Retrieval-only (46 scored questions): vector 89% / 0.809 · keyword 91% / 0.767 
 | Skipped documents still count as "seen" | Otherwise a `--text-only` run against a real database would delete the scan and image as "removed" | Filter in the source (would prune them) |
 
 **Measured** (CI reproduction, fresh database, no keys, no Neo4j): hit rate 93%, MRR 0.822, so the 0.93 / 0.80 gates pass with no margin. Phase 3 measured 96% / 0.847 on 46 questions; the misses now are `gitlab-ticker-symbol`, `acme-2fa-sms`, `acme-overtime-comp`. Worth a look before the next retrieval change: a single new miss fails CI.
+
+## 2026-11-18 · Back on Claude; Phase 7B checkpoint A: cost ledger and budget cap
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Defaults back to Claude (chat + vision: Sonnet 5.5, cheap: Haiku 5.5) | $5 of Anthropic credit added; Ollama Cloud's free quota is used up | Ollama Cloud subscription; local Ollama (free, but a 3B model is unreliable for tools) |
+| Sonnet's server-side refusal fallback removed | LiteLLM forwards `extra_body` as a literal field and Anthropic rejects every request ("extra_body: Extra inputs are not permitted") | Patch LiteLLM; pass the field another way (revisit when LiteLLM supports it) |
+| Our own `pricing` per model in models.yaml, used before LiteLLM's price map | LiteLLM's bundled map priced Haiku 5.5 at $0, so its spend was invisible. Prices from platform.claude.com: Sonnet $2/$10, Haiku $0.10/$0.50 per million tokens | Upgrade LiteLLM (new dependency version, may still lag) |
+| `llm_usage` ledger: one row per model call, written by the gateway (model, purpose = call name, source, user, tokens, cost) | `messages` only had the final answer's cost; routing, rewriting, memory, agent steps, evals and ingestion were uncounted | Read costs back from Langfuse (another service in the loop for the budget check) |
+| User and source via a context variable (like the reader's access tags), set by the login dependency and by `begin_script()` in eval/ingestion scripts | No `user_id` threaded through every function; background tasks inherit it | Pass user_id explicitly to every gateway call |
+| Daily budget (`budget.daily_usd: 2.00`, UTC day, everyone) and per-run `--budget` on evals; both checked BEFORE a call, new error kind `budget` | Stops a runaway loop or eval from draining the $5; a cost is only known after the call, so a cap can be overshot by one call | Hard-stop mid-stream; per-user budgets (later, with real users) |
+| A ledger failure never blocks a call | The cap is a safety net; an answer must not fail because one row couldn't be written | Fail closed (safer for money, worse for users) |
+| Per-user spend is visible to every logged-in user on Analytics | Demo app with three fictional users; there are no admin roles yet | Admin-only section (needs roles) |
+
+## 2026-11-18 · Phase 7B checkpoint B: semantic cache
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Cache table in pgvector (`semantic_cache`), not Redis | Our Redis image has no vector search; pgvector is already there (principle 5: one database) | Redis Stack (new image); exact-match cache in Redis (people rarely repeat the exact words) |
+| Key the cache on the rewritten question's embedding, checked before retrieval | Follow-ups become standalone first, so they can match too; a hit skips retrieval and the answer call | Raw question (follow-ups never match); check after retrieval (slower hits) |
+| `scope_key` = hash of access tags, model, prompt version, recalled facts and a knowledge-base stamp (document count + latest update) | An answer is only reused where everything that shaped it matches: an HR answer never reaches non-HR readers, a personal answer never reaches another user, and any ingest/upload/delete starts a fresh cache with no cleanup hooks | Per-user cache (safe but no sharing); TTL only (stale after document changes) |
+| **Changed from the approved plan:** recalled facts go INTO the key instead of "skip the cache when memory is used" | Recall returns a user's top 5 facts for every question, so skipping would mean no hits for anyone with memories. Same safety: reuse only with identical facts | Skip on memory (cache useless for real users) |
+| Not cached: image questions, "retry", agent actions, answers that were cut off, errored or flagged by the output check | The image is part of the question; retry asks for a new answer; actions must never be replayed | — |
+| **Threshold 0.98, not the planned 0.90** (measured with `evals.cache_run`, free: 20 paraphrase pairs, 20 look-alikes) | At 0.90: 60% hits but 2 wrong answers; 0.92: 1 wrong; 0.98: 10% hits, 0 wrong. The embedding model ignores word order ("Who does the IT Manager report to?" vs "Who reports to the IT Manager?" = 0.974) and "vacation days for new employees" vs "after five years" = 0.910 | Verify a candidate hit with the cheap model ("same answer?", ~$0.0001 vs ~$0.005 for an answer) to allow ~0.85 safely: proposed as a follow-up, needs a small paid measurement |
+| Evals never use the cache (`make_chat_service(cache=None)`) | An eval must measure the model's answer, not a saved one | — |
+
+**Measured:** threshold table above. **Not yet measured:** hit rate on real traffic (the dashboard now shows hits and dollars saved).
+
+## 2026-11-18 · Phase 7B checkpoint C: model routing ("Auto")
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| "Auto" in the model menu (preselected); `routing: {simple: claude-haiku, complex: claude-sonnet}` in models.yaml | Use the cheapest model that is good enough per question, as a config change | Always Sonnet (simple, ~2.5x the answer cost); a trained router model |
+| The existing intent classifier also outputs `complexity` (prompt `classify_intent` v2) | It already runs on every message for agent routing: no extra call, no extra latency | A separate routing call; heuristics (question length, keywords) |
+| Agent turns, image questions and failed classifications always use the complex model; a named model is never rerouted | A wrong "simple" costs answer quality, a wrong "complex" only money; tool calls must be exact | Route agent steps too |
+| API fallback when a request names no model stays `defaults.chat`; only the UI preselects Auto | Scripts, the MCP server and the graph build need a real model id | Default everything to Auto |
+
+**Measured** (golden set v2, 55 questions, judge Haiku 5.5, $0.49 for all of today's measurements):
+
+| | Sonnet on every question | Auto |
+| --- | --- | --- |
+| Answered by | Sonnet 55 | Haiku 34, Sonnet 21 |
+| Answer cost | $0.295 | **$0.116 (-61%)**; about $0.127 with the classifier calls (which the chat makes anyway) |
+| Avg latency | 2.1 s | **1.6 s** |
+| Correctness (judge) | 82% | 83% |
+| Faithfulness (judge) | 97% | 96% |
+| Cited the right source | 96% | 92% (Haiku left the citation off 2 simple GitLab questions: async, DRI) |
+| Hit rate / MRR | 96% / 0.865 | same (retrieval doesn't depend on the answer model) |
+
+Classifier check before the runs: agent routing still 12/12 with prompt v2; 34 of 55 golden questions labelled simple. Per-question differences go both ways (12 questions changed by half a point or more), so with 55 questions and a Haiku judge a 1-point difference is noise. Weakest categories for both: keyword (50-58%) and relational (69%), a retrieval/graph issue, not a model one.
+
+## 2026-11-18 · Phase 7D: deploy-ready (no public deploy)
+
+| Decision | Why | Alternatives |
+| --- | --- | --- |
+| Multi-stage Dockerfiles with `dev` and `prod` targets; `docker-compose.prod.yml` layered on the dev file | One source of truth for services; prod only overrides what differs | A separate full prod compose file (drifts from dev) |
+| Next.js `output: "standalone"`, served by `node server.js` as a non-root user | 300 MB image with only traced files; login page 0.03 s first load vs 1.0 s in dev mode | `next start` with all node_modules (bigger image) |
+| Backend prod image runs as non-root `atlas`, code read-only, `--proxy-headers`, one worker | Least privilege; behind an HTTPS proxy the app must trust X-Forwarded-*; each worker loads the embedding model, so scale with containers | Several uvicorn workers (memory x N) |
+| Migrations in a one-off `migrate` container that the backend waits for (`service_completed_successfully`) | Several backends running `alembic upgrade` on start could race | Keep migrate-on-start (fine for one container only) |
+| `AUTH_SECURE_COOKIE` env var overrides config/auth.yaml; prod defaults it to true | The deployment, not the repo, knows whether it has HTTPS | Separate auth.prod.yaml |
+| Prod publishes only 3000, 8000 and 3001 (`ports: !reset []` elsewhere); separate prod volumes for model cache and uploads | Databases must not face the internet; dev volumes are root-owned | Firewall-only protection |
+| CI adds `npm run build` and builds both prod images with plain `docker build` | A production-only failure (prerendering, Dockerfile) fails the PR, not the deploy; no extra third-party action to pin | docker/build-push-action (another dependency) |
+| One VM + Caddy documented as the deployment path (docs/deploy.md), frontend and API on one site | 11 services; one Compose stack is simpler than four managed services; `SameSite=Lax` cookies need one registrable domain | Vercel + Render + Neo4j Aura + Langfuse Cloud |
+
+**Verified:** `next build` passes (all pages; dynamic ones as partial prerender). The prod frontend image ran beside the dev stack: /login in 0.03 s first, 0.005 s after (dev: 1.0 s / 0.25 s), as user `atlas`, protected pages redirect to login. The prod backend image imports the app as `atlas`, can write uploads, can't modify its code, and `AUTH_SECURE_COOKIE=true` turns secure cookies on. The merged prod Compose config validates. **Not verified:** the whole prod stack started end to end (it shares ports with the running dev stack), and HTTPS on a real domain.
+
+**Found:** `npm audit` flags next 16.4.2 (moderate, GHSA-mfr8-8qww-v76h and GHSA-vc7v-qv4w-wrv8: cache leaks through `use cache` / `unstable_cache`, which Atlas doesn't use); fixed in 16.4.6. Upgrade pending approval.

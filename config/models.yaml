@@ -13,18 +13,36 @@
 #   structured_output  "native" (default): provider enforces JSON schemas; "prompt": it doesn't,
 #                    so the schema goes in the prompt and the reply is validated + retried once
 #   vision           true if the model can read images (Phase 6); defaults.vision answers them
+#   pricing          USD per million input/output tokens (Phase 7B). Used before LiteLLM's bundled
+#                    price map, which lags new models (it priced Haiku 5.5 at $0). Thinking
+#                    tokens are billed as output tokens.
 #
 # Changing a model is a config change, not a code change (principle 2 + 8).
 
+# Spending cap (Phase 7B). Every model call is recorded in the llm_usage table; once today's
+# spend (UTC day, all users, chats + evals + ingestion) reaches daily_usd, the gateway refuses
+# further calls with a "budget" error until tomorrow. It checks BEFORE a call, so one call can
+# overshoot by its own cost. Calls to models without a price count as $0. null = no cap.
+budget:
+  daily_usd: 2.00
+
+# Model routing (Phase 7B). Adds "Auto" to the model menu (and preselects it). In Auto, the
+# intent classifier, which already runs on every message, also labels it simple or complex:
+# simple one-fact lookups go to `simple`, everything else (and every agent action) to `complex`.
+# A failed classification counts as complex. Measure: evals.run --model auto vs claude-sonnet.
+routing:
+  enabled: true
+  label: Auto (Haiku or Sonnet)
+  simple: claude-haiku
+  complex: claude-sonnet
+
 defaults:
-  # Ollama Cloud until the Anthropic account has API credit (2026-10-27: "credit balance too low").
-  # To switch back: chat: claude-sonnet, cheap: claude-haiku.
-  chat: gpt-oss-cloud     # preselected in the UI's model dropdown
-  cheap: gpt-oss-20b-cloud  # classification (step 4) and the eval runner (step 8)
-  # Phase 6: messages with images go to this model (GPT-OSS is text-only). Gemma 4 reads
-  # images and is in the Ollama Cloud free tier (tested 2026-11-05). Switch to claude-sonnet
-  # once the Anthropic account has credit.
-  vision: gemma4-cloud
+  # Back on Claude since 2026-11-18 (Anthropic credit added). If credit runs out again, the
+  # Ollama Cloud fallback is: chat: gpt-oss-cloud, cheap: gpt-oss-20b-cloud, vision: gemma4-cloud.
+  chat: claude-sonnet     # preselected in the UI's model dropdown
+  cheap: claude-haiku     # classification (step 4) and the eval runner (step 8)
+  # Phase 6: messages with images go to this model (Claude reads images).
+  vision: claude-sonnet
 
 models:
   - id: claude-sonnet
@@ -33,17 +51,15 @@ models:
     litellm_model: anthropic/claude-sonnet-5-5
     api_key_setting: anthropic_api_key
     vision: true
+    pricing: { input_per_mtok: 2.00, output_per_mtok: 10.00 }  # platform.claude.com, 2026-11-18
     params:
       max_tokens: 16000
       # Claude 5.5 models always think before answering; effort controls how much.
       # "low" keeps chat replies fast. No temperature: these models reject non-default sampling (400).
       reasoning_effort: low
-    # Server-side refusal fallback: if a safety classifier declines a request, Anthropic re-runs
-    # it on a fallback model inside the same call. Remove both blocks to opt out.
-    extra_headers:
-      anthropic-beta: server-side-fallback-2026-07-01
-    extra_body:
-      fallbacks: default
+    # Server-side refusal fallback (anthropic-beta: server-side-fallback-2026-07-01 plus
+    # extra_body.fallbacks) removed 2026-11-18: our LiteLLM version forwards `extra_body` as a
+    # literal field and Anthropic rejects it ("extra_body: Extra inputs are not permitted").
 
   - id: claude-haiku
     label: Claude Haiku 5.5
@@ -51,6 +67,8 @@ models:
     litellm_model: anthropic/claude-haiku-5-5
     api_key_setting: anthropic_api_key
     vision: true
+    # Prompts up to 100K tokens; longer ones cost 5x (Atlas prompts stay far below that).
+    pricing: { input_per_mtok: 0.10, output_per_mtok: 0.50 }  # platform.claude.com, 2026-11-18
     params:
       max_tokens: 4096
       reasoning_effort: low

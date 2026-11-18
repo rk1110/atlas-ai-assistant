@@ -194,3 +194,16 @@ async def test_over_the_limit_is_a_429_with_retry_after(client: AsyncClient):
     assert (await client.post("/api/chat", json=body)).status_code == 200
     second = await client.post("/api/chat", json=body)
     assert second.status_code == 429 and int(second.headers["retry-after"]) <= 60
+
+
+def test_deployment_can_force_secure_cookies(monkeypatch):
+    """Phase 7D: docker-compose.prod.yml sets AUTH_SECURE_COOKIE=true; the repo's auth.yaml
+    keeps false for http://localhost."""
+    from core.auth_config import get_auth_config
+
+    get_auth_config.cache_clear()
+    monkeypatch.setenv("AUTH_SECURE_COOKIE", "true")
+    try:
+        assert get_auth_config().session.secure_cookie is True
+    finally:
+        get_auth_config.cache_clear()

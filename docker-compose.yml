@@ -192,6 +192,7 @@ services:
     build:
       context: .            # repo root, so the image can include prompts/ and config/
       dockerfile: backend/Dockerfile
+      target: dev           # docker-compose.prod.yml builds the `prod` target instead
     image: atlas-backend:dev  # also runs the MCP servers below (same code, other entry points)
     restart: unless-stopped
     depends_on:
@@ -254,6 +255,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: dev           # docker-compose.prod.yml builds the `prod` target instead
     image: atlas-backend:dev
     restart: unless-stopped
     depends_on:
@@ -272,6 +274,7 @@ services:
     build:
       context: .
       dockerfile: backend/Dockerfile
+      target: dev           # docker-compose.prod.yml builds the `prod` target instead
     image: atlas-backend:dev
     restart: unless-stopped
     depends_on:
@@ -287,7 +290,9 @@ services:
       - ./config:/app/config
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      target: dev           # `next dev`; docker-compose.prod.yml builds `prod` (next build)
     restart: unless-stopped
     depends_on:
       backend: { condition: service_healthy }

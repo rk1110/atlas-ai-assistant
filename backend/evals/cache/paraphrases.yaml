@@ -1,0 +1,52 @@
+# Semantic cache tuning set (Phase 7B), used by `python -m evals.cache_run`.
+#
+# same:      two wordings of ONE question: the second should reuse the first's answer (a hit).
+# different: questions that share words and topic but need a DIFFERENT answer: serving one's
+#            answer to the other is a wrong answer (a false hit). These matter more than hits:
+#            a miss costs a model call, a false hit costs a user a wrong answer.
+#
+# Questions are standalone, as the cache sees them after query rewriting.
+
+same:
+  - ["How many vacation days do new employees get at Acme?", "How much PTO do new hires get at Acme?"]
+  - ["How many vacation days do new employees get at Acme?", "how many vacation days do new employees get at acme"]
+  - ["How many weeks of paid parental leave does Acme Corp offer?", "How long is paid parental leave at Acme?"]
+  - ["How much can I spend on a client dinner at Acme without manager approval?", "What's the limit for a client dinner at Acme before I need my manager's approval?"]
+  - ["How do I get reimbursed for a work expense at Acme?", "What's the process for getting my work expenses reimbursed at Acme?"]
+  - ["Can I work from home at Acme?", "Is remote work allowed at Acme?"]
+  - ["How often does Acme replace laptops?", "How frequently are laptops refreshed at Acme?"]
+  - ["I clicked a link in a suspicious email. What should I do?", "What should I do after clicking a link in a phishing email?"]
+  - ["Are SMS codes OK for 2FA at Acme?", "Can I use text message codes for two-factor authentication at Acme?"]
+  - ["Is there a budget for courses or conferences at Acme?", "Does Acme pay for training courses and conferences?"]
+  - ["What are GitLab's core values?", "What values does GitLab have?"]
+  - ["What is GitLab's mission?", "What's the mission of GitLab?"]
+  - ["What does DRI mean at GitLab?", "What is a DRI at GitLab?"]
+  - ["What is an MVC at GitLab?", "What does MVC stand for at GitLab?"]
+  - ["Does GitLab prefer meetings or asynchronous communication?", "Is GitLab async-first or meeting-first?"]
+  - ["What are coffee chats at GitLab?", "What is a GitLab coffee chat?"]
+  - ["How many paid sick days do I get at Acme?", "How many days of paid sick leave does Acme give?"]
+  - ["Who leads the team that owns the expense policy?", "Who is the head of the team responsible for the expense policy?"]
+  - ["Which Slack channel should I use to ask about laptop repairs?", "Where on Slack do I ask about getting my laptop repaired?"]
+  - ["Does Acme offer pet insurance?", "Is pet insurance part of Acme's benefits?"]
+
+different:
+  - ["How many vacation days do new employees get at Acme?", "How many vacation days do employees get after five years at Acme?"]
+  - ["How many vacation days do new employees get at Acme?", "How many sick days do new employees get at Acme?"]
+  - ["How many vacation days do new employees get at Acme?", "Can I carry unused vacation days over to next year at Acme?"]
+  - ["How many weeks of paid parental leave does Acme Corp offer?", "Can I return part-time after parental leave at Acme?"]
+  - ["How many weeks of paid parental leave does Acme Corp offer?", "How much bereavement leave does Acme offer?"]
+  - ["How much can I spend on a client dinner at Acme without manager approval?", "How much can I spend on my own meals on a business trip at Acme?"]
+  - ["How do I get reimbursed for a work expense at Acme?", "What happens if I submit an expense receipt six weeks late at Acme?"]
+  - ["Can I work from home at Acme?", "Will Acme pay for a chair for my home office?"]
+  - ["How often does Acme replace laptops?", "What should I do if my laptop is stolen?"]
+  - ["How often does Acme replace laptops?", "How do I request a new laptop at Acme?"]
+  - ["Are SMS codes OK for 2FA at Acme?", "What password length does Acme require?"]
+  - ["Is there a budget for courses or conferences at Acme?", "Is there a budget for home office equipment at Acme?"]
+  - ["What are GitLab's core values?", "What is GitLab's mission?"]
+  - ["What does DRI mean at GitLab?", "What does MVC mean at GitLab?"]
+  - ["Does GitLab prefer meetings or asynchronous communication?", "Does GitLab have offices or is it fully remote?"]
+  - ["How many paid sick days do I get at Acme?", "When do I need a doctor's note for sick leave at Acme?"]
+  - ["Who leads the team that owns the expense policy?", "Who leads the team that owns the parental leave policy?"]
+  - ["Who does the IT Manager report to?", "Who reports to the IT Manager?"]
+  - ["Which Slack channel should I use to ask about laptop repairs?", "Which Slack channel should I use for merge request questions at GitLab?"]
+  - ["Does Acme offer pet insurance?", "Does Acme offer health insurance?"]

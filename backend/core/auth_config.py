@@ -1,5 +1,6 @@
 """Login, permission and rate-limit settings loaded from `config/auth.yaml` (principle 8)."""
 
+import os
 from functools import lru_cache
 
 import yaml
@@ -35,6 +36,13 @@ class AuthConfig(BaseModel):
 @lru_cache
 def get_auth_config() -> AuthConfig:
     path = REPO_ROOT / "config" / "auth.yaml"
-    if not path.exists():
-        return AuthConfig()
-    return AuthConfig.model_validate(yaml.safe_load(path.read_text()))
+    config = (
+        AuthConfig.model_validate(yaml.safe_load(path.read_text()))
+        if path.exists()
+        else AuthConfig()
+    )
+    # Phase 7D: the deployment decides, not the repo. docker-compose.prod.yml sets
+    # AUTH_SECURE_COOKIE=true (HTTPS-only cookies); local dev keeps auth.yaml's false.
+    if (flag := os.environ.get("AUTH_SECURE_COOKIE")) is not None:
+        config.session.secure_cookie = flag.strip().lower() in ("1", "true", "yes")
+    return config

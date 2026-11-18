@@ -32,6 +32,7 @@ from core.agent_config import get_agent_config
 from core.interfaces.tool import Tool
 from core.llm import ChatMessage
 from core.rag_config import get_rag_config
+from core.usage import begin_script
 from evals.metrics import rate
 from retrieval import build_retriever, get_retriever
 from tools.calculator import Calculator
@@ -225,9 +226,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Atlas agent evals.")
     parser.add_argument("--task", help="only this task id")
     parser.add_argument(
+        "--budget", type=float, help="stop calling models once this run has spent this many USD"
+    )
+    parser.add_argument(
         "--mode", choices=["single", "team"], help="default: mode in config/agent.yaml"
     )
     args = parser.parse_args()
+    begin_script("eval", args.budget)
     tasks = [t for t in load_tasks() if args.task in (None, t.id)]
     if not tasks:
         parser.error("no such task")

@@ -41,6 +41,7 @@ from core.db import get_session_factory
 from core.guardrails_config import get_guardrails_config
 from core.interfaces.retriever import Chunk, RetrievalFilters, Retriever
 from core.prompts import RenderedPrompt
+from core.usage import begin_script
 from guardrails.injection import heuristic_signals
 from guardrails.output import unsupported_destinations
 from guardrails.pii import get_pii_masker
@@ -294,7 +295,11 @@ def main() -> None:
     parser.add_argument("--part", choices=PARTS, help="run only this part")
     parser.add_argument("--model", help="answer model for the attacks (default: chat model)")
     parser.add_argument("--prompt", help="pin chat_system to this version, e.g. v5")
+    parser.add_argument(
+        "--budget", type=float, help="stop calling models once this run has spent this many USD"
+    )
     args = parser.parse_args()
+    begin_script("eval", args.budget)
     model_id = args.model or get_catalog().defaults.chat
     asyncio.run(run([args.part] if args.part else list(PARTS), model_id, args.prompt))
 

@@ -6,7 +6,8 @@ models is a config change in `config/models.yaml`, never a code change.
 
 Owning this single choke point is what makes cross-cutting features cheap:
 - every call is traced in Langfuse here, once (step 5);
-- Phase 7 adds caching, routing and cost caps here, once.
+- every call is recorded in the usage ledger, and refused once the budget is spent (Phase 7B);
+- Phase 7 adds caching and routing here, once.
 
 Three kinds of call:
 - `stream_chat`: free text, streamed as `TextDelta`s then one `Completion` (the chat UI)
@@ -32,6 +33,7 @@ from pydantic import BaseModel, Field, ValidationError
 
 from core.model_catalog import ModelCatalog, ModelEntry
 from core.tracing import Generation, Span, Tracer
+from core.usage import UsageLedger
 
 litellm.suppress_debug_info = True  # LiteLLM otherwise prints help banners on every error
 
@@ -96,7 +98,7 @@ class Completion(BaseModel):
     litellm_model: str
     input_tokens: int
     output_tokens: int
-    cost_usd: float | None  # None when LiteLLM has no price for the model
+    cost_usd: float | None  # None when neither models.yaml nor LiteLLM has a price
     latency_ms: int
     time_to_first_token_ms: int | None  # None for non-streamed calls
     finish_reason: str | None  # "stop" = natural end, "length" = hit max_tokens
@@ -118,6 +120,7 @@ LLMErrorKind = Literal[
     "billing",
     "invalid_output",
     "provider_error",
+    "budget",
 ]
 
 
@@ -138,9 +141,10 @@ class LLMError(Exception):
 
 
 class LLMGateway:
-    def __init__(self, catalog: ModelCatalog, tracer: Tracer):
+    def __init__(self, catalog: ModelCatalog, tracer: Tracer, ledger: UsageLedger | None = None):
         self._catalog = catalog
         self._tracer = tracer
+        self._ledger = ledger  # None in unit tests: no recording, no budget
 
     # ------------------------------------------------------------------ streaming text
 
@@ -215,6 +219,7 @@ class LLMGateway:
             entry, usage, finish_reason, started, first_token_at, span.trace_id
         )
         self._finish_generation(generation, "".join(parts), completion, prompt_ref)
+        await self._record(name, completion)
         if own_trace:
             span.finish(output="".join(parts))
         yield completion
@@ -271,6 +276,8 @@ class LLMGateway:
             content = choice.message.content or ""
             call_in, call_out = _token_counts(response.usage)
             call_cost = _cost(entry, call_in, call_out)
+            if self._ledger:  # every attempt is billed, including the ones we retry
+                await self._ledger.record(entry.id, name, call_in, call_out, call_cost)
             input_tokens, output_tokens = input_tokens + call_in, output_tokens + call_out
             cost = None if cost is None or call_cost is None else cost + call_cost
 
@@ -367,6 +374,7 @@ class LLMGateway:
         )
         output = {"text": text, "tool_calls": [c.model_dump() for c in calls]}
         self._finish_generation(generation, output, completion, prompt_ref)
+        await self._record(name, completion)
         if own_trace:
             span.finish(output=output)
         return ToolTurn(text=text, tool_calls=calls, completion=completion)
@@ -390,7 +398,19 @@ class LLMGateway:
         availability = await self._catalog.availability(entry)
         if not availability.available:
             raise LLMError("unavailable", availability.reason or "Model unavailable", model_id)
+        if self._ledger and (reason := await self._ledger.over_budget()):
+            raise LLMError("budget", reason, model_id)
         return entry
+
+    async def _record(self, purpose: str, completion: "Completion") -> None:
+        if self._ledger:
+            await self._ledger.record(
+                completion.model_id,
+                purpose,
+                completion.input_tokens,
+                completion.output_tokens,
+                completion.cost_usd,
+            )
 
     def _call_kwargs(self, entry: ModelEntry) -> dict[str, Any]:
         """Everything model-specific comes from config: model string, endpoint, key, params."""
@@ -551,7 +571,10 @@ def _token_counts(usage: Any) -> tuple[int, int]:
 
 
 def _cost(entry: ModelEntry, input_tokens: int, output_tokens: int) -> float | None:
-    """Price from LiteLLM's bundled map; None when the model has no known price."""
+    """Our price from models.yaml if set, else LiteLLM's bundled map; None when neither knows
+    the model. (Ollama Cloud's free tier has no per-token price: None, shown as "no price".)"""
+    if entry.pricing:
+        return entry.pricing.cost(input_tokens, output_tokens)
     try:
         prompt_cost, completion_cost = litellm.cost_per_token(
             model=entry.litellm_model, prompt_tokens=input_tokens, completion_tokens=output_tokens

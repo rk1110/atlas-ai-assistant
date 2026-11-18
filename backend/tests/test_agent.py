@@ -221,11 +221,16 @@ async def test_step_limit_stops_a_looping_model():
 
 
 class FakeRouter:
-    def __init__(self, intent: str):
+    def __init__(self, intent: str, complexity: str = "complex"):
         self.intent = intent
+        self.complexity = complexity
+        self.calls = 0
 
     async def classify(self, message: str, model_id=None, *, trace=None) -> IntentResult:
-        label = IntentClassification(reasoning="scripted", intent=self.intent, confidence=1.0)  # type: ignore[arg-type]
+        self.calls += 1
+        label = IntentClassification(
+            reasoning="scripted", intent=self.intent, complexity=self.complexity, confidence=1.0
+        )  # type: ignore[arg-type]
         return IntentResult(classification=label, completion=COMPLETION, prompt_ref="x")
 
 

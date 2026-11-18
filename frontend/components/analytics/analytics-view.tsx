@@ -1,3 +1,4 @@
+import { CostReport } from "@/components/analytics/cost-report";
 import { EvalRunsTable } from "@/components/analytics/eval-runs-table";
 import { KpiCards } from "@/components/analytics/kpi-cards";
 import { QualityChart } from "@/components/analytics/quality-chart";
@@ -6,7 +7,8 @@ import type { Analytics } from "@/lib/api";
 
 /**
  * Analytics v1: is Atlas getting better (eval scores per run), and how is it used (answers,
- * latency, cost)? All from Postgres: eval_runs and messages. Langfuse has the per-trace detail.
+ * latency, cost)? All from Postgres: eval_runs, messages and llm_usage (every model call, Phase 7B).
+ * Langfuse has the per-trace detail.
  */
 export function AnalyticsView({ data }: { data: Analytics }) {
   const runs = data.eval_runs;
@@ -36,6 +38,7 @@ export function AnalyticsView({ data }: { data: Analytics }) {
           ]}
         />
       </div>
+      <CostReport costs={data.costs} />
       <UsageChart usage={data.usage} />
       <EvalRunsTable runs={runs} />
     </div>

@@ -1,0 +1,86 @@
+# Production overrides (Phase 7D). Layered ON TOP of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# What changes from dev (see docs/deploy.md for the why and the deploy steps):
+# - images are the `prod` targets: an optimised `next build` and a non-root backend, with the
+#   code baked in (no bind mounts, no hot reload)
+# - migrations run once, in their own short-lived `migrate` container, before the backend
+#   starts (with several backends, each running `alembic upgrade` on start could race)
+# - only the frontend (3000), backend (8000) and Langfuse UI (3001) are published; databases
+#   and the MCP servers are reachable only inside Docker's network
+# - session cookies are HTTPS-only, CORS allows only your real frontend address
+#
+# Values with no default must be set in .env (the stack refuses to start without them).
+
+services:
+  postgres:
+    ports: !reset []
+  redis:
+    ports: !reset []
+  neo4j:
+    ports: !reset []
+  minio:
+    ports: !reset []
+
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+      target: prod
+    image: atlas-backend:prod
+    command: ["alembic", "upgrade", "head"]
+    restart: "no"
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set in .env}
+
+  backend:
+    build:
+      target: prod
+    image: atlas-backend:prod
+    command: !reset null  # the image's CMD: uvicorn without --reload, with --proxy-headers
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    environment:
+      # Session cookies only over HTTPS. Set AUTH_SECURE_COOKIE=false ONLY to try this stack
+      # on http://localhost; a real deployment must keep it true.
+      AUTH_SECURE_COOKIE: ${AUTH_SECURE_COOKIE:-true}
+      # The frontend's public address, e.g. '["https://atlas.example.com"]'
+      CORS_ORIGINS: ${CORS_ORIGINS:?set in .env, e.g. ["https://atlas.example.com"]}
+      LANGFUSE_ENVIRONMENT: production
+      LANGFUSE_UI_URL: ${LANGFUSE_UI_URL:-http://localhost:3001}
+    volumes: !override
+      - ./data:/app/data:ro  # the knowledge-base documents, for `python -m ingestion.run`
+      - hf_cache_prod:/home/atlas/.cache/huggingface
+      - uploads_prod:/app/uploads
+
+  mcp-jira:
+    build:
+      target: prod
+    image: atlas-backend:prod
+    ports: !reset []
+    volumes: !reset []
+
+  mcp-slack:
+    build:
+      target: prod
+    image: atlas-backend:prod
+    ports: !reset []
+    volumes: !reset []
+
+  frontend:
+    build:
+      target: prod
+      args:
+        # Inlined into the browser JavaScript at build time: the backend's PUBLIC address.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?set in .env, e.g. https://api.atlas.example.com}
+    image: atlas-frontend:prod
+    volumes: !reset []
+
+# Separate from dev's volumes: the prod image runs as a non-root user, and a volume created
+# by the dev (root) containers would not be writable for it.
+volumes:
+  hf_cache_prod:
+  uploads_prod:

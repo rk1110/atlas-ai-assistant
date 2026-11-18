@@ -30,6 +30,7 @@ import asyncio
 import json
 import statistics
 import time
+from collections import Counter
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -41,6 +42,7 @@ from api.deps import get_catalog, get_gateway, get_prompts, get_tracer, make_cha
 from core.db import get_session_factory
 from core.llm import ChatMessage, LLMError
 from core.rag_config import get_rag_config
+from core.usage import begin_script
 from evals.judge import Judge, JudgeScores
 from evals.metrics import cited_correct, rate, reciprocal_rank
 from evals.schema import GoldenQuestion, load_golden_set
@@ -82,6 +84,7 @@ async def run(
     )
     rows: list[EvalResult] = []
     prompt_ref: str | None = None
+    answered_by: Counter[str] = Counter()
     for index, q in enumerate(questions, start=1):
         result = await chat.answer(
             q.question,
@@ -92,6 +95,8 @@ async def run(
             history=_history(q),
         )
         prompt_ref = result.prompt_ref
+        if result.completion:
+            answered_by[result.completion.model_id] += 1
         scores = await _grade(judge, q, result)
         rows.append(_to_row(run_id, q, result, scores))
         _print_progress(index, len(questions), q, result, scores)
@@ -103,12 +108,16 @@ async def run(
         session.add_all(rows)
         eval_run.finished_at = func.now()
         eval_run.prompt_ref = prompt_ref
+        # With --model auto, which model actually answered how many questions (Phase 7B).
+        eval_run.config = {**(eval_run.config or {}), "answered_by": dict(answered_by)}
         for field, value in summary.items():
             setattr(eval_run, field, value)
         await session.commit()
 
     report = _write_report(run_id, model_id, prompt_ref, version, notes, rows, summary)
     _print_summary(summary, rows, questions, report)
+    if len(answered_by) > 1 or model_id == "auto":
+        print("  answered by        " + ", ".join(f"{m} {n}" for m, n in answered_by.items()))
     get_tracer().flush()  # send buffered traces before the script exits
     # Non-zero exit when nothing worked, so CI can fail the build.
     return 1 if summary["error_count"] == len(rows) else 0
@@ -391,13 +400,18 @@ def main() -> None:
     )
     parser.add_argument("--min-hit-rate", type=float, help="retrieval-only CI gate, e.g. 0.9")
     parser.add_argument("--min-mrr", type=float, help="retrieval-only CI gate, e.g. 0.75")
+    parser.add_argument(
+        "--budget", type=float, help="stop calling models once this run has spent this many USD"
+    )
     args = parser.parse_args()
+    begin_script("eval", args.budget)
 
     catalog = get_catalog()
     # Answer with the CHAT model: evals measure what users get. The judge uses the cheap one.
     model_id = args.model or catalog.defaults.chat
-    if catalog.get(model_id) is None:
-        parser.error(f"unknown model '{model_id}'. Options: {[m.id for m in catalog.list()]}")
+    if not catalog.is_selectable(model_id):  # a model id, or "auto" (Phase 7B routing)
+        options = [m.id for m in catalog.list()] + (["auto"] if catalog.auto_enabled else [])
+        parser.error(f"unknown model '{model_id}'. Options: {options}")
 
     golden = load_golden_set()
     questions = golden.filtered(tag=args.tag, limit=args.limit, exclude_tag=args.exclude_tag)

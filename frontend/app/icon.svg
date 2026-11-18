@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Same mark as the sidebar logo: lucide's Compass on the sidebar-primary teal. -->
+  <rect width="32" height="32" rx="8" fill="#2a7a76"/>
+  <g transform="translate(6 6) scale(0.8333)" fill="none" stroke="#fdfefe" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="12" cy="12" r="10"/>
+    <path d="m16.24 7.76-1.804 5.411a2 2 0 0 1-1.265 1.265L7.76 16.24l1.804-5.411a2 2 0 0 1 1.265-1.265z"/>
+  </g>
+</svg>
